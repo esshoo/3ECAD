@@ -80,5 +80,8 @@
     "*.md": [
       "prettier --config ./.prettierrc.js --write"
     ]
+  },
+  "dependencies": {
+    "pdfjs-dist": "^5.7.284"
   }
 }

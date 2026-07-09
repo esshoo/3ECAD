@@ -21,6 +21,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      pdfjs-dist:
+        specifier: ^5.7.284
+        version: 5.7.284
     devDependencies:
       '@changesets/cli':
         specifier: ^2.29.5
