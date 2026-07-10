@@ -1,15 +1,20 @@
-import type { AcApContext } from '@mlightcad/cad-simple-viewer'
+﻿import type { AcApContext } from '@mlightcad/cad-simple-viewer'
 import {
   AcDbLine,
   AcDbPolyline,
+  AcDbRasterImage,
   AcGePoint2d,
   AcGePoint3d,
   log
 } from '@mlightcad/data-model'
 import * as pdfjsLib from 'pdfjs-dist'
-import type { PDFOperatorList } from 'pdfjs-dist/types/src/display/api'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
+import type {
+  PDFOperatorList,
+  PDFPageProxy
+} from 'pdfjs-dist/types/src/display/api'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 /** 1 PDF point in mm (1 pt = 1/72 inch = 25.4/72 mm) */
 const PT_TO_MM = 25.4 / 72
@@ -17,8 +22,17 @@ const PT_TO_MM = 25.4 / 72
 /** Bezier approximation resolution (line segments per curve) */
 const BEZIER_STEPS = 8
 
+const PDF_BACKGROUND_LAYER = 'PDF_PAGE_1_BACKGROUND'
+
 /** 2D point in PDF user space before conversion to model-space mm. */
 type Point2 = { x: number; y: number }
+
+type PdfImportEntity = AcDbPolyline | AcDbLine | AcDbRasterImage
+
+type ViewLike = {
+  addEntity?: (entity: PdfImportEntity) => void
+  zoomToFitDrawing?: () => void
+}
 
 /**
  * Converts a PDF file into CAD entities appended to the current document's
@@ -50,6 +64,8 @@ export class AcApPdfImportConvertor {
 
   /**
    * Converts the first page of a PDF ArrayBuffer into CAD entities.
+   * If no vector paths are found, it imports the PDF page as a raster image.
+   *
    * @param context - Application context for the target document
    * @param data - Raw PDF bytes
    * @param pageNumber - 1-based page number (default: 1)
@@ -65,20 +81,105 @@ export class AcApPdfImportConvertor {
       const entities = this.extractEntities(operatorList, pageHeight)
 
       if (entities.length === 0) {
-        log.warn('[PdfImport] No vector paths found in PDF page.')
+        log.warn(
+          '[PdfImport] No vector paths found. Importing page as raster image instead.'
+        )
+        await this.importRasterPage(context, page, pageNumber)
         return
       }
 
       const modelSpace = context.doc.database.tables.blockTable.modelSpace
+      const view = this.getView(context)
 
       for (const entity of entities) {
         modelSpace.appendEntity(entity)
+        view?.addEntity?.(entity)
       }
 
-      log.info(`[PdfImport] Imported ${entities.length} entities from PDF.`)
+      view?.zoomToFitDrawing?.()
+
+      log.info(`[PdfImport] Imported ${entities.length} vector entities from PDF.`)
     } catch (err) {
       log.error('[PdfImport] Failed to import PDF:', err)
     }
+  }
+
+  private async importRasterPage(
+    context: AcApContext,
+    page: PDFPageProxy,
+    pageNumber: number
+  ) {
+    const scale = 2
+    const viewport = page.getViewport({ scale })
+
+    const canvas = document.createElement('canvas')
+    const canvasContext = canvas.getContext('2d')
+
+    if (!canvasContext) {
+      throw new Error('Canvas 2D context is not available.')
+    }
+
+    canvas.width = Math.ceil(viewport.width)
+    canvas.height = Math.ceil(viewport.height)
+
+    await page.render({
+      canvasContext,
+      viewport
+    } as any).promise
+
+    const blob = await this.canvasToPngBlob(canvas)
+
+    const pageWidthMm = viewport.width * PT_TO_MM
+    const pageHeightMm = viewport.height * PT_TO_MM
+
+    const docWithLayerService = context.doc as AcApContext['doc'] & {
+      layerService?: {
+        createLayers?: (names: string[]) => void
+      }
+    }
+
+    docWithLayerService.layerService?.createLayers?.([PDF_BACKGROUND_LAYER])
+
+    const image = new AcDbRasterImage()
+
+    image.layer = PDF_BACKGROUND_LAYER
+    image.image = blob
+    image.position = new AcGePoint3d(0, 0, 0)
+    image.width = pageWidthMm
+    image.height = pageHeightMm
+    image.imageSize = new AcGePoint2d(canvas.width, canvas.height)
+    image.isImageShown = true
+    image.isImageTransparent = false
+    image.isClipped = false
+    image.rotation = 0
+
+    const modelSpace = context.doc.database.tables.blockTable.modelSpace
+    modelSpace.appendEntity(image)
+
+    const view = this.getView(context)
+    view?.addEntity?.(image)
+    view?.zoomToFitDrawing?.()
+
+    log.info(
+      `[PdfImport] Imported PDF page ${pageNumber} as raster image ${canvas.width}x${canvas.height}.`
+    )
+  }
+
+  private canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (!blob) {
+          reject(new Error('Failed to convert PDF canvas to PNG blob.'))
+          return
+        }
+
+        resolve(blob)
+      }, 'image/png')
+    })
+  }
+
+  private getView(context: AcApContext): ViewLike | undefined {
+    return (context as AcApContext & { view?: ViewLike }).view
   }
 
   private extractEntities(
@@ -228,14 +329,7 @@ export class AcApPdfImportConvertor {
 }
 
 /**
- * Approximates a cubic Bézier curve as a polyline.
- *
- * @param p0 - Start point
- * @param p1 - First control point
- * @param p2 - Second control point
- * @param p3 - End point
- * @param steps - Number of line segments to generate
- * @returns Sampled points along the curve (excluding `p0`)
+ * Approximates a cubic Bezier curve as a polyline.
  */
 function cubicBezier(
   p0: Point2,

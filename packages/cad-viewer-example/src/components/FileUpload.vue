@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="file-upload-container">
     <div class="upload-panel">
       <div class="upload-main">
@@ -11,7 +11,7 @@
           <div class="upload-hero-text">
             <h1 class="upload-title">Select CAD File to View</h1>
             <p class="upload-subtitle">
-              Import DWG or DXF drawings into the viewer
+              Import DWG, DXF, or PDF drawings into the viewer
             </p>
           </div>
         </section>
@@ -33,9 +33,10 @@
             class="upload-dropzone"
             drag
             :auto-upload="false"
-            accept=".dwg,.dxf"
+            accept=".dwg,.dxf,.pdf,application/pdf"
             :on-change="handleFileChange"
             :before-upload="beforeUpload"
+            :show-file-list="false"
           >
             <div class="dropzone-content">
               <p class="dropzone-title">
@@ -44,6 +45,7 @@
               <div class="format-tags">
                 <span class="format-tag">DWG</span>
                 <span class="format-tag">DXF</span>
+                <span class="format-tag">PDF</span>
               </div>
             </div>
           </el-upload>
@@ -305,14 +307,14 @@ const handleNewDrawing = () => {
 
 const beforeUpload: UploadProps['beforeUpload'] = (rawFile: File) => {
   if (!isValidFile(rawFile)) {
-    log.warn('Invalid file type. Please upload DWG or DXF files.')
+    log.warn('Invalid file type. Please upload DWG, DXF, or PDF files.')
     return false
   }
   return true
 }
 
 const isValidFile = (file: File): boolean => {
-  const validExtensions = ['.dwg', '.dxf']
+  const validExtensions = ['.dwg', '.dxf', '.pdf']
   const fileName = file.name.toLowerCase()
   return validExtensions.some(ext => fileName.endsWith(ext))
 }
@@ -634,3 +636,4 @@ const isValidFile = (file: File): boolean => {
   }
 }
 </style>
+

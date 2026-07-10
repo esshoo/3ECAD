@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div id="app-root">
     <!-- Upload screen when no drawing is open -->
     <div v-if="!showViewer" class="upload-screen">
@@ -31,9 +31,11 @@ import {
   AcApDocManager,
   AcApOpenViewMode,
   AcEdCommandStack,
-  AcEdOpenMode
+  AcEdOpenMode,
+  type AcApContext
 } from '@mlightcad/cad-simple-viewer'
 import { MlCadViewer } from '@mlightcad/cad-viewer'
+import { AcApPdfImportConvertor } from '@mlightcad/cad-pdf-plugin'
 import { log } from '@mlightcad/data-model'
 import { computed, nextTick, ref } from 'vue'
 
@@ -82,8 +84,9 @@ const useMainThreadDraw = ref(false)
 const drawNoPlotLayers = ref(false)
 const progressiveRendering = ref(false)
 const openViewMode = ref<AcApOpenViewMode | undefined>(undefined)
+const pendingPdfFile = ref<File | null>(null)
 
-const createNewDrawing = async () => {
+const createNewDrawing = async (): Promise<boolean> => {
   const success = await AcApDocManager.instance.newDocument({
     mode: selectedMode.value,
     drawNoPlotLayers: drawNoPlotLayers.value,
@@ -93,13 +96,65 @@ const createNewDrawing = async () => {
   if (!success) {
     log.error('Failed to create new drawing')
   }
+  return success
 }
 
-const onViewerCreate = async () => {
+type MaybeDocManagerContext = {
+  context?: AcApContext
+  appContext?: AcApContext
+  currentContext?: AcApContext
+  _context?: AcApContext
+}
+
+const getCurrentContext = (
+  eventContext?: AcApContext
+): AcApContext | undefined => {
+  if (eventContext) {
+    return eventContext
+  }
+
+  const manager = AcApDocManager.instance as unknown as MaybeDocManagerContext
+  return (
+    manager.context ??
+    manager.appContext ??
+    manager.currentContext ??
+    manager._context
+  )
+}
+
+const isPdfFile = (file: File): boolean =>
+  file.name.toLowerCase().endsWith('.pdf')
+
+const importPdfIntoCurrentDrawing = async (
+  file: File,
+  eventContext?: AcApContext
+) => {
+  const context = getCurrentContext(eventContext)
+
+  if (!context) {
+    log.error('[PdfImport] Failed: AcApContext is not available.')
+    return
+  }
+
+  const buffer = await file.arrayBuffer()
+  const convertor = new AcApPdfImportConvertor()
+  await convertor.convert(context, buffer, 1)
+}
+
+const onViewerCreate = async (eventContext?: AcApContext) => {
   initialize()
+
   if (store.isNewDrawing) {
     await nextTick()
-    await createNewDrawing()
+    const success = await createNewDrawing()
+    if (!success) return
+  }
+
+  if (pendingPdfFile.value) {
+    await nextTick()
+    const file = pendingPdfFile.value
+    pendingPdfFile.value = null
+    await importPdfIntoCurrentDrawing(file, eventContext)
   }
 }
 
@@ -126,8 +181,6 @@ const handleFileSelect = (
   enableProgressiveRendering: boolean,
   viewMode: AcApOpenViewMode | undefined
 ) => {
-  store.isNewDrawing = false
-  store.selectedFile = file
   applyOpenOptions(
     mode,
     mainThreadDraw,
@@ -135,6 +188,17 @@ const handleFileSelect = (
     enableProgressiveRendering,
     viewMode
   )
+
+  if (isPdfFile(file)) {
+    pendingPdfFile.value = file
+    store.selectedFile = null
+    store.isNewDrawing = true
+    return
+  }
+
+  pendingPdfFile.value = null
+  store.isNewDrawing = false
+  store.selectedFile = file
 }
 
 const handleNewDrawing = (
@@ -144,6 +208,7 @@ const handleNewDrawing = (
   enableProgressiveRendering: boolean,
   viewMode: AcApOpenViewMode | undefined
 ) => {
+  pendingPdfFile.value = null
   store.selectedFile = null
   store.isNewDrawing = true
   applyOpenOptions(
