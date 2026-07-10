@@ -78,6 +78,72 @@ export class AcApPdfImportConvertor {
       const pageHeight = viewport.height
 
       const operatorList = await page.getOperatorList()
+
+      const opNameByCode = new Map<number, string>(
+        Object.entries(pdfjsLib.OPS).map(([name, code]) => [
+          Number(code),
+          name
+        ])
+      )
+
+      const opCounts = new Map<string, number>()
+
+      for (const fn of operatorList.fnArray) {
+        const name = opNameByCode.get(Number(fn)) ?? `UNKNOWN_${fn}`
+        opCounts.set(name, (opCounts.get(name) ?? 0) + 1)
+      }
+
+      const opSummary = Array.from(opCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => `${name}:${count}`)
+        .join(', ')
+
+      log.info(`[PdfImport DEBUG] PDF operator counts: ${opSummary}`)
+
+      const firstConstructIndex = operatorList.fnArray.findIndex(
+        fn => Number(fn) === Number(pdfjsLib.OPS.constructPath)
+      )
+
+      if (firstConstructIndex >= 0) {
+        const firstArgs = operatorList.argsArray[firstConstructIndex] as any
+
+        log.info(
+          `[PdfImport DEBUG] first constructPath raw arg types: ${
+            Array.isArray(firstArgs)
+              ? firstArgs.map((x: any) =>
+                  x == null
+                    ? 'null'
+                    : `${Object.prototype.toString.call(x)} len=${x.length ?? 'na'}`
+                ).join(' | ')
+              : Object.prototype.toString.call(firstArgs)
+          }`
+        )
+
+        log.info(
+          `[PdfImport DEBUG] first constructPath arg0 sample: ${
+            Array.isArray(firstArgs)
+              ? JSON.stringify(Array.from(firstArgs[0] ?? []).slice(0, 30))
+              : 'not-array'
+          }`
+        )
+
+        log.info(
+          `[PdfImport DEBUG] first constructPath arg1 sample: ${
+            Array.isArray(firstArgs)
+              ? JSON.stringify(Array.from(firstArgs[1] ?? []).slice(0, 60))
+              : 'not-array'
+          }`
+        )
+
+        log.info(
+          `[PdfImport DEBUG] first constructPath arg2 sample: ${
+            Array.isArray(firstArgs)
+              ? JSON.stringify(firstArgs[2] ?? null)
+              : 'not-array'
+          }`
+        )
+      }
+
       const entities = this.extractEntities(operatorList, pageHeight)
 
       if (entities.length === 0) {
@@ -190,10 +256,20 @@ export class AcApPdfImportConvertor {
     const { fnArray, argsArray } = opList
     const result: (AcDbPolyline | AcDbLine)[] = []
 
+    // PDF.js constructPath uses DrawOPS numbers, not OPS.moveTo/lineTo directly.
+    const DRAW_MOVE_TO = 0
+    const DRAW_LINE_TO = 1
+    const DRAW_CURVE_TO = 2
+    const DRAW_QUADRATIC_CURVE_TO = 3
+    const DRAW_CLOSE_PATH = 4
+
     let subpaths: Point2[][] = []
     let current: Point2[] = []
     let curX = 0
     let curY = 0
+
+    const tx = (x: number, _y: number) => x * PT_TO_MM
+    const ty = (_x: number, y: number) => (pageHeight - y) * PT_TO_MM
 
     const flush = () => {
       if (current.length > 1) subpaths.push(current)
@@ -209,80 +285,262 @@ export class AcApPdfImportConvertor {
       subpaths = []
     }
 
-    const tx = (x: number, _y: number) => x * PT_TO_MM
-    const ty = (_x: number, y: number) => (pageHeight - y) * PT_TO_MM
+    const moveTo = (x: number, y: number) => {
+      flush()
+      curX = x
+      curY = y
+      current = [{ x: tx(x, y), y: ty(x, y) }]
+    }
 
+    const lineTo = (x: number, y: number) => {
+      curX = x
+      curY = y
+      current.push({ x: tx(x, y), y: ty(x, y) })
+    }
+
+    const curveTo = (
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number,
+      x3: number,
+      y3: number
+    ) => {
+      const pts = cubicBezier(
+        { x: curX, y: curY },
+        { x: x1, y: y1 },
+        { x: x2, y: y2 },
+        { x: x3, y: y3 },
+        BEZIER_STEPS
+      )
+
+      for (const p of pts) {
+        current.push({ x: tx(p.x, p.y), y: ty(p.x, p.y) })
+      }
+
+      curX = x3
+      curY = y3
+    }
+
+    const quadraticCurveTo = (
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number
+    ) => {
+      for (let step = 1; step <= BEZIER_STEPS; step++) {
+        const t = step / BEZIER_STEPS
+        const mt = 1 - t
+        const x = mt * mt * curX + 2 * mt * t * x1 + t * t * x2
+        const y = mt * mt * curY + 2 * mt * t * y1 + t * t * y2
+        current.push({ x: tx(x, y), y: ty(x, y) })
+      }
+
+      curX = x2
+      curY = y2
+    }
+
+    const closePath = () => {
+      if (current.length > 0) {
+        current.push({ ...current[0] })
+      }
+      flush()
+    }
+
+    const rectangle = (x: number, y: number, width: number, height: number) => {
+      moveTo(x, y)
+      lineTo(x + width, y)
+      lineTo(x + width, y + height)
+      lineTo(x, y + height)
+      closePath()
+    }
+
+    const processConstructPath = (
+      pathOps: ArrayLike<number>,
+      pathArgs: ArrayLike<number>
+    ) => {
+      let argIndex = 0
+
+      const take = () => Number(pathArgs[argIndex++])
+
+      for (let i = 0; i < pathOps.length; i++) {
+        const pathOp = Number(pathOps[i])
+
+        switch (pathOp) {
+          case DRAW_MOVE_TO:
+          case OPS.moveTo: {
+            moveTo(take(), take())
+            break
+          }
+          case DRAW_LINE_TO:
+          case OPS.lineTo: {
+            lineTo(take(), take())
+            break
+          }
+          case DRAW_CURVE_TO:
+          case OPS.curveTo: {
+            curveTo(take(), take(), take(), take(), take(), take())
+            break
+          }
+          case OPS.curveTo2: {
+            curveTo(curX, curY, take(), take(), take(), take())
+            break
+          }
+          case OPS.curveTo3: {
+            const x1 = take()
+            const y1 = take()
+            const x3 = take()
+            const y3 = take()
+            curveTo(x1, y1, x3, y3, x3, y3)
+            break
+          }
+          case DRAW_QUADRATIC_CURVE_TO: {
+            quadraticCurveTo(take(), take(), take(), take())
+            break
+          }
+          case OPS.rectangle: {
+            rectangle(take(), take(), take(), take())
+            break
+          }
+          case DRAW_CLOSE_PATH:
+          case OPS.closePath: {
+            closePath()
+            break
+          }
+        }
+      }
+    }
+
+    const processPackedPathStream = (
+      packedStream: ArrayLike<number>,
+      minMax?: ArrayLike<number>
+    ) => {
+      let index = 0
+
+      let maxAbs = 0
+      if (minMax) {
+        for (let i = 0; i < minMax.length; i++) {
+          maxAbs = Math.max(maxAbs, Math.abs(Number(minMax[i])))
+        }
+      }
+
+      // In this PDF.js output, packed path coordinates are fixed-point x100.
+      // Example from debug: 27118 means 271.18 PDF points.
+      const packedScale = maxAbs > pageHeight * 10 ? 0.01 : 1
+      const take = () => Number(packedStream[index++]) * packedScale
+
+      while (index < packedStream.length) {
+        const pathOp = Number(packedStream[index++])
+
+        switch (pathOp) {
+          case DRAW_MOVE_TO: {
+            moveTo(take(), take())
+            break
+          }
+          case DRAW_LINE_TO: {
+            lineTo(take(), take())
+            break
+          }
+          case DRAW_CURVE_TO: {
+            curveTo(take(), take(), take(), take(), take(), take())
+            break
+          }
+          case DRAW_QUADRATIC_CURVE_TO: {
+            quadraticCurveTo(take(), take(), take(), take())
+            break
+          }
+          case DRAW_CLOSE_PATH: {
+            closePath()
+            break
+          }
+          case OPS.rectangle: {
+            rectangle(take(), take(), take(), take())
+            break
+          }
+          default: {
+            // Unknown packed op. Stop this stream to avoid reading wrong coordinates.
+            return
+          }
+        }
+      }
+    }
     for (let i = 0; i < fnArray.length; i++) {
       const fn = fnArray[i]
-      const args = argsArray[i] as number[]
+      const rawArgs = argsArray[i] as unknown
 
       switch (fn) {
+        case OPS.constructPath: {
+          const constructArgs = rawArgs as any[]
+
+          const maybePathOps = constructArgs[0]
+          const maybePathArgs = constructArgs[1]
+          const maybeMinMax = constructArgs[2] as ArrayLike<number> | undefined
+
+          if (
+            maybePathOps &&
+            maybePathArgs &&
+            (Array.isArray(maybePathOps) || ArrayBuffer.isView(maybePathOps))
+          ) {
+            processConstructPath(
+              maybePathOps as ArrayLike<number>,
+              maybePathArgs as ArrayLike<number>
+            )
+          } else if (Array.isArray(maybePathArgs)) {
+            for (const packedStream of maybePathArgs) {
+              if (
+                packedStream &&
+                (Array.isArray(packedStream) || ArrayBuffer.isView(packedStream))
+              ) {
+                processPackedPathStream(
+                  packedStream as ArrayLike<number>,
+                  maybeMinMax
+                )
+              }
+            }
+          } else if (
+            maybePathArgs &&
+            (Array.isArray(maybePathArgs) || ArrayBuffer.isView(maybePathArgs))
+          ) {
+            processPackedPathStream(
+              maybePathArgs as ArrayLike<number>,
+              maybeMinMax
+            )
+          }
+
+          break
+        }
         case OPS.moveTo: {
-          flush()
-          curX = args[0]
-          curY = args[1]
-          current = [{ x: tx(curX, curY), y: ty(curX, curY) }]
+          const args = rawArgs as number[]
+          moveTo(args[0], args[1])
           break
         }
         case OPS.lineTo: {
-          curX = args[0]
-          curY = args[1]
-          current.push({ x: tx(curX, curY), y: ty(curX, curY) })
+          const args = rawArgs as number[]
+          lineTo(args[0], args[1])
           break
         }
         case OPS.curveTo: {
-          const [x1, y1, x2, y2, x3, y3] = args
-          const pts = cubicBezier(
-            { x: curX, y: curY },
-            { x: x1, y: y1 },
-            { x: x2, y: y2 },
-            { x: x3, y: y3 },
-            BEZIER_STEPS
-          )
-          for (const p of pts) {
-            current.push({ x: tx(p.x, p.y), y: ty(p.x, p.y) })
-          }
-          curX = x3
-          curY = y3
+          const args = rawArgs as number[]
+          curveTo(args[0], args[1], args[2], args[3], args[4], args[5])
           break
         }
         case OPS.curveTo2: {
-          const [x2, y2, x3, y3] = args
-          const pts = cubicBezier(
-            { x: curX, y: curY },
-            { x: curX, y: curY },
-            { x: x2, y: y2 },
-            { x: x3, y: y3 },
-            BEZIER_STEPS
-          )
-          for (const p of pts) {
-            current.push({ x: tx(p.x, p.y), y: ty(p.x, p.y) })
-          }
-          curX = x3
-          curY = y3
+          const args = rawArgs as number[]
+          curveTo(curX, curY, args[0], args[1], args[2], args[3])
           break
         }
         case OPS.curveTo3: {
-          const [x1, y1, x3, y3] = args
-          const pts = cubicBezier(
-            { x: curX, y: curY },
-            { x: x1, y: y1 },
-            { x: x3, y: y3 },
-            { x: x3, y: y3 },
-            BEZIER_STEPS
-          )
-          for (const p of pts) {
-            current.push({ x: tx(p.x, p.y), y: ty(p.x, p.y) })
-          }
-          curX = x3
-          curY = y3
+          const args = rawArgs as number[]
+          curveTo(args[0], args[1], args[2], args[3], args[2], args[3])
+          break
+        }
+        case OPS.rectangle: {
+          const args = rawArgs as number[]
+          rectangle(args[0], args[1], args[2], args[3])
           break
         }
         case OPS.closePath: {
-          if (current.length > 0 && subpaths.length === 0) {
-            current.push({ ...current[0] })
-          }
-          flush()
+          closePath()
           break
         }
         case OPS.stroke:
@@ -290,6 +548,9 @@ export class AcApPdfImportConvertor {
         case OPS.eoFill:
         case OPS.fillStroke:
         case OPS.eoFillStroke:
+        case OPS.closeStroke:
+        case OPS.closeFillStroke:
+        case OPS.closeEOFillStroke:
         case OPS.endPath: {
           commit()
           break
@@ -300,7 +561,6 @@ export class AcApPdfImportConvertor {
     commit()
     return result
   }
-
   private subpathToEntity(pts: Point2[]): AcDbPolyline | AcDbLine | null {
     if (pts.length < 2) return null
 
@@ -356,3 +616,8 @@ function cubicBezier(
   }
   return pts
 }
+
+
+
+
+
