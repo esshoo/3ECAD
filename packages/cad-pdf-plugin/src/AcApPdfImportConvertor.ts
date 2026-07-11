@@ -1,5 +1,7 @@
 ﻿import type { AcApContext } from '@mlightcad/cad-simple-viewer'
 import {
+  AcCmColor,
+  AcCmColorMethod,
   AcDbLine,
   AcDbPolyline,
   AcDbRasterImage,
@@ -100,6 +102,332 @@ export class AcApPdfImportConvertor {
 
       log.info(`[PdfImport DEBUG] PDF operator counts: ${opSummary}`)
 
+      // 3ECAD_PDF_OPERATOR_ANALYZER_START
+      const compactPdfArg = (value: any, depth = 0): any => {
+        if (value == null) return value
+
+        const valueType = typeof value
+        if (valueType !== 'object') return value
+
+        if (ArrayBuffer.isView(value)) {
+          const view = value as ArrayBufferView
+          const arrayLike = value as unknown as {
+            length?: number
+            [index: number]: unknown
+          }
+
+          const length =
+            typeof arrayLike.length === 'number'
+              ? arrayLike.length
+              : view.byteLength
+
+          const sample =
+            typeof arrayLike.length === 'number'
+              ? Array.from(
+                  { length: Math.min(arrayLike.length, 24) },
+                  (_, index) => arrayLike[index]
+                )
+              : []
+
+          return {
+            type: Object.prototype.toString.call(value),
+            length,
+            byteLength: view.byteLength,
+            sample
+          }
+        }
+
+        if (Array.isArray(value)) {
+          return {
+            type: 'Array',
+            length: value.length,
+            sample: value.slice(0, 12).map(item => compactPdfArg(item, depth + 1))
+          }
+        }
+
+        if (depth >= 2) {
+          return {
+            type: value?.constructor?.name ?? Object.prototype.toString.call(value)
+          }
+        }
+
+        const output: Record<string, any> = {}
+        for (const key of Object.keys(value).slice(0, 16)) {
+          output[key] = compactPdfArg(value[key], depth + 1)
+        }
+
+        return output
+      }
+
+      const opName = (fn: unknown) =>
+        opNameByCode.get(Number(fn)) ?? `UNKNOWN_${Number(fn)}`
+
+      const interestingPdfOps = new Set([
+        'save',
+        'restore',
+        'transform',
+        'setLineWidth',
+        'setDash',
+        'setStrokeRGBColor',
+        'setFillRGBColor',
+        'setStrokeGray',
+        'setFillGray',
+        'setStrokeCMYKColor',
+        'setFillCMYKColor',
+        'constructPath',
+        'stroke',
+        'fill',
+        'eoFill',
+        'fillStroke',
+        'eoFillStroke',
+        'closeStroke',
+        'closeFillStroke',
+        'closeEOFillStroke',
+        'clip',
+        'eoClip',
+        'endPath',
+        'beginMarkedContent',
+        'beginMarkedContentProps',
+        'endMarkedContent',
+        'paintImageXObject',
+        'paintInlineImageXObject',
+        'paintJpegXObject',
+        'paintImageMaskXObject',
+        'showText',
+        'showSpacedText',
+        'nextLineShowText',
+        'setFont'
+      ])
+
+      const analyzeOperatorCounts: Record<string, number> = {}
+      const analyzeSamples: Record<string, any[]> = {}
+      const markedContentSamples: any[] = []
+      const paintSequenceSamples: any[] = []
+
+      let currentPathHasClip = false
+      let pathOpCount = 0
+      let pathSequenceIndex = 0
+
+      for (let opIndex = 0; opIndex < operatorList.fnArray.length; opIndex++) {
+        const name = opName(operatorList.fnArray[opIndex])
+        const args = operatorList.argsArray[opIndex]
+
+        analyzeOperatorCounts[name] = (analyzeOperatorCounts[name] ?? 0) + 1
+
+        if (interestingPdfOps.has(name)) {
+          const bucket = (analyzeSamples[name] ??= [])
+          if (bucket.length < 8) {
+            bucket.push({
+              index: opIndex,
+              args: compactPdfArg(args)
+            })
+          }
+        }
+
+        if (name === 'beginMarkedContent' || name === 'beginMarkedContentProps') {
+          if (markedContentSamples.length < 32) {
+            markedContentSamples.push({
+              index: opIndex,
+              op: name,
+              args: compactPdfArg(args)
+            })
+          }
+        }
+
+        if (name === 'constructPath') {
+          pathOpCount++
+        }
+
+        if (name === 'clip' || name === 'eoClip') {
+          currentPathHasClip = true
+        }
+
+        if (
+          name === 'stroke' ||
+          name === 'fill' ||
+          name === 'eoFill' ||
+          name === 'fillStroke' ||
+          name === 'eoFillStroke' ||
+          name === 'closeStroke' ||
+          name === 'closeFillStroke' ||
+          name === 'closeEOFillStroke' ||
+          name === 'endPath'
+        ) {
+          if (paintSequenceSamples.length < 32) {
+            paintSequenceSamples.push({
+              sequence: pathSequenceIndex++,
+              index: opIndex,
+              paintOp: name,
+              pathOpCount,
+              hadClipBeforePaint: currentPathHasClip
+            })
+          }
+
+          pathOpCount = 0
+          currentPathHasClip = false
+        }
+      }
+
+      let optionalContentReport: any = {
+        available: false,
+        groups: [],
+        order: null,
+        error: null
+      }
+
+      try {
+        const optionalContentConfig = await (pdf as any).getOptionalContentConfig?.({
+          intent: 'any'
+        })
+
+        const rawGroups = optionalContentConfig?.getGroups?.()
+
+        const groups =
+          rawGroups instanceof Map
+            ? Array.from(rawGroups.entries()).map(([id, group]) => ({
+                id,
+                group: compactPdfArg(group)
+              }))
+            : rawGroups && typeof rawGroups === 'object'
+              ? Object.entries(rawGroups).map(([id, group]) => ({
+                  id,
+                  group: compactPdfArg(group)
+                }))
+              : []
+
+        optionalContentReport = {
+          available: !!optionalContentConfig,
+          groups,
+          order:
+            compactPdfArg((optionalContentConfig as any)?.order) ??
+            compactPdfArg((optionalContentConfig as any)?._order) ??
+            null,
+          error: null
+        }
+      } catch (error) {
+        optionalContentReport = {
+          available: false,
+          groups: [],
+          order: null,
+          error: error instanceof Error ? error.message : String(error)
+        }
+      }
+
+      // 3ECAD_OPTIONAL_CONTENT_DEEP_DEBUG_START
+      const collectOcgIdsFromOperatorList = () => {
+        const ids = new Set<string>()
+
+        for (let opIndex = 0; opIndex < operatorList.fnArray.length; opIndex++) {
+          const name = opName(operatorList.fnArray[opIndex])
+
+          if (name !== 'beginMarkedContentProps') continue
+
+          const args = operatorList.argsArray[opIndex] as any[]
+          const tag = args?.[0]
+          const properties = args?.[1]
+
+          if (tag === 'OC' && properties?.id) {
+            ids.add(String(properties.id))
+          }
+        }
+
+        return Array.from(ids).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      }
+
+      const markedOcgIds = collectOcgIdsFromOperatorList()
+
+      const safeCall = (fn: (() => any) | undefined) => {
+        try {
+          return typeof fn === 'function' ? compactPdfArg(fn()) : 'missing'
+        } catch (error) {
+          return {
+            error: error instanceof Error ? error.message : String(error)
+          }
+        }
+      }
+
+      const readOptionalContentConfigDebug = async (intent: string) => {
+        try {
+          const config = await (pdf as any).getOptionalContentConfig?.({ intent })
+
+          const protoKeys: string[] = []
+          let proto = config ? Object.getPrototypeOf(config) : null
+
+          while (proto && proto !== Object.prototype) {
+            protoKeys.push(
+              ...Object.getOwnPropertyNames(proto).filter(name => name !== 'constructor')
+            )
+            proto = Object.getPrototypeOf(proto)
+          }
+
+          const ownKeys = config
+            ? Reflect.ownKeys(config).map(key => String(key))
+            : []
+
+          const groupLookups: Record<string, any> = {}
+
+          for (const id of markedOcgIds) {
+            const ocgRef = { type: 'OCG', id }
+
+            groupLookups[id] = {
+              getGroupById: safeCall(() => config?.getGroup?.(id)),
+              getGroupByRef: safeCall(() => config?.getGroup?.(ocgRef)),
+              isVisibleByRef: safeCall(() => config?.isVisible?.(ocgRef)),
+              rawOwnValue: safeCall(() => (config as any)?.[id])
+            }
+          }
+
+          return {
+            intent,
+            exists: !!config,
+            constructorName: config?.constructor?.name ?? null,
+            ownKeys,
+            protoKeys: Array.from(new Set(protoKeys)),
+            compactConfig: compactPdfArg(config),
+            groupsViaGetGroups: safeCall(() => config?.getGroups?.()),
+            order: safeCall(() => (config as any)?.order ?? (config as any)?._order),
+            groupLookups
+          }
+        } catch (error) {
+          return {
+            intent,
+            error: error instanceof Error ? error.message : String(error)
+          }
+        }
+      }
+
+      const optionalContentDebug = {
+        markedOcgIds,
+        display: await readOptionalContentConfigDebug('display'),
+        any: await readOptionalContentConfigDebug('any'),
+        print: await readOptionalContentConfigDebug('print')
+      }
+      // 3ECAD_OPTIONAL_CONTENT_DEEP_DEBUG_END
+      const pdfAnalyzeReport = {
+        source: '3ECAD_PDF_OPERATOR_ANALYZER',
+        page: pageNumber,
+        viewport: {
+          width: viewport.width,
+          height: viewport.height
+        },
+        optionalContent: optionalContentReport,
+        ocgIds: markedOcgIds,
+        optionalContentDebug,
+        operatorCounts: analyzeOperatorCounts,
+        samples: analyzeSamples,
+        markedContentSamples,
+        paintSequenceSamples
+      }
+
+      ;(globalThis as any).__3ECAD_PDF_ANALYZE__ = pdfAnalyzeReport
+
+      log.info(
+        `[PdfImport ANALYZE] ${JSON.stringify(pdfAnalyzeReport, null, 2).slice(
+          0,
+          30000
+        )}`
+      )
+      // 3ECAD_PDF_OPERATOR_ANALYZER_END
       const firstConstructIndex = operatorList.fnArray.findIndex(
         fn => Number(fn) === Number(pdfjsLib.OPS.constructPath)
       )
@@ -144,7 +472,104 @@ export class AcApPdfImportConvertor {
         )
       }
 
-      const entities = this.extractEntities(operatorList, pageHeight)
+      const ocgIdToLayerName = new Map<string, string>()
+
+      try {
+        const optionalContentConfig = await (pdf as any).getOptionalContentConfig?.({
+          intent: 'display'
+        })
+
+        for (const id of markedOcgIds) {
+          const group = optionalContentConfig?.getGroup?.(id)
+          const layerName =
+            typeof group?.name === 'string' && group.name.trim()
+              ? group.name.trim()
+              : `PDF_OCG_${id}`
+
+          ocgIdToLayerName.set(id, layerName)
+        }
+      } catch (error) {
+        log.warn(
+          '[PdfImport] Failed to resolve OCG layer names. Falling back to OCG ids.',
+          error
+        )
+
+        for (const id of markedOcgIds) {
+          ocgIdToLayerName.set(id, `PDF_OCG_${id}`)
+        }
+      }
+
+      const pdfLayerNames = Array.from(
+        new Set(Array.from(ocgIdToLayerName.values()))
+      )
+
+      const docWithLayerService = context.doc as AcApContext['doc'] & {
+        layerService?: {
+          createLayers?: (names: string[]) => void
+          setLayerColor?: (layerName: string, color: AcCmColor) => boolean
+        }
+      }
+
+      docWithLayerService.layerService?.createLayers?.(pdfLayerNames)
+
+      const layerColorCounts = new Map<string, Map<number, number>>()
+
+      const entities = this.extractEntities(
+        operatorList,
+        pageHeight,
+        ocgIdToLayerName,
+        layerColorCounts
+      )
+
+      const actualEntityLayerNames = Array.from(
+        new Set(
+          entities
+            .map(entity => entity.layer)
+            .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+        )
+      )
+
+      docWithLayerService.layerService?.createLayers?.(actualEntityLayerNames)
+
+      const layerColorSummary: Record<string, string> = {}
+
+      for (const [layerName, colorCounts] of layerColorCounts) {
+        const sortedColors = Array.from(colorCounts.entries()).sort(
+          (a, b) => b[1] - a[1]
+        )
+
+        const rgb = sortedColors[0]?.[0]
+
+        if (rgb == null) continue
+
+        const colorText = `#${rgb
+          .toString(16)
+          .padStart(6, '0')
+          .toUpperCase()}`
+
+        const color = new AcCmColor(AcCmColorMethod.ByColor, rgb)
+
+        docWithLayerService.layerService?.setLayerColor?.(layerName, color)
+
+        layerColorSummary[layerName] = colorText
+      }
+
+      const layerColorCountsSummary: Record<string, Record<string, number>> = {}
+
+      for (const [layerName, colorCounts] of layerColorCounts) {
+        layerColorCountsSummary[layerName] = Object.fromEntries(
+          Array.from(colorCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([rgb, count]) => [
+              `#${rgb.toString(16).padStart(6, '0').toUpperCase()}`,
+              count
+            ])
+        )
+      }
+
+      ;(globalThis as any).__3ECAD_PDF_LAYER_COLORS__ = layerColorSummary
+      ;(globalThis as any).__3ECAD_PDF_LAYER_COLOR_COUNTS__ =
+        layerColorCountsSummary
 
       if (entities.length === 0) {
         log.warn(
@@ -250,7 +675,9 @@ export class AcApPdfImportConvertor {
 
   private extractEntities(
     opList: PDFOperatorList,
-    pageHeight: number
+    pageHeight: number,
+    ocgIdToLayerName: Map<string, string>,
+    layerColorCounts: Map<string, Map<number, number>>
   ): (AcDbPolyline | AcDbLine)[] {
     const { OPS } = pdfjsLib
     const { fnArray, argsArray } = opList
@@ -264,31 +691,212 @@ export class AcApPdfImportConvertor {
     const DRAW_CLOSE_PATH = 4
 
     let subpaths: Point2[][] = []
+    let subpathLayers: string[] = []
+    let subpathStrokeColors: number[] = []
+    let subpathFillColors: number[] = []
     let current: Point2[] = []
+    let currentSubpathLayerName: string | undefined
+    let currentSubpathStrokeRgb: number | undefined
+    let currentSubpathFillRgb: number | undefined
+    const importedEntityLayerCounts = new Map<string, number>()
     let curX = 0
     let curY = 0
 
-    const tx = (x: number, _y: number) => x * PT_TO_MM
-    const ty = (_x: number, y: number) => (pageHeight - y) * PT_TO_MM
+    type PdfMatrix = [number, number, number, number, number, number]
 
-    const flush = () => {
-      if (current.length > 1) subpaths.push(current)
-      current = []
+    type PdfGraphicsState = {
+      ctm: PdfMatrix
+      strokeRgb: number
+      fillRgb: number
+      lineWidth: number
     }
 
-    const commit = () => {
-      flush()
-      for (const sp of subpaths) {
-        const entity = this.subpathToEntity(sp)
-        if (entity) result.push(entity)
+    let graphicsState: PdfGraphicsState = {
+      ctm: [1, 0, 0, 1, 0, 0],
+      strokeRgb: 0x000000,
+      fillRgb: 0x000000,
+      lineWidth: 1
+    }
+
+    const graphicsStateStack: PdfGraphicsState[] = []
+    const markedContentStack: Array<string | null> = []
+    const cloneMatrix = (matrix: PdfMatrix): PdfMatrix => [
+      matrix[0],
+      matrix[1],
+      matrix[2],
+      matrix[3],
+      matrix[4],
+      matrix[5]
+    ]
+
+    const multiplyMatrix = (left: PdfMatrix, right: PdfMatrix): PdfMatrix => [
+      left[0] * right[0] + left[2] * right[1],
+      left[1] * right[0] + left[3] * right[1],
+      left[0] * right[2] + left[2] * right[3],
+      left[1] * right[2] + left[3] * right[3],
+      left[0] * right[4] + left[2] * right[5] + left[4],
+      left[1] * right[4] + left[3] * right[5] + left[5]
+    ]
+
+    const applyCtm = (x: number, y: number) => {
+      const [a, b, c, d, e, f] = graphicsState.ctm
+
+      return {
+        x: a * x + c * y + e,
+        y: b * x + d * y + f
       }
+    }
+
+    const clampByte = (value: number) =>
+      Math.max(0, Math.min(255, Math.round(value)))
+
+    const normalizePdfColorComponent = (value: number) =>
+      value <= 1 ? clampByte(value * 255) : clampByte(value)
+
+    const rgbFromHexString = (value: string) => {
+      const normalized = value.trim()
+
+      const match = normalized.match(/^#?([0-9a-f]{6})$/i)
+
+      if (!match) return undefined
+
+      return Number.parseInt(match[1], 16)
+    }
+
+    const rgbFromComponents = (
+      r: number | string | undefined,
+      g?: number,
+      b?: number
+    ) => {
+      if (typeof r === 'string') {
+        const parsed = rgbFromHexString(r)
+
+        if (parsed !== undefined) {
+          return parsed
+        }
+      }
+
+      return (
+        (normalizePdfColorComponent(Number(r ?? 0)) << 16) |
+        (normalizePdfColorComponent(Number(g ?? 0)) << 8) |
+        normalizePdfColorComponent(Number(b ?? 0))
+      )
+    }
+
+    const rgbFromGray = (gray: number) => {
+      const byte = normalizePdfColorComponent(gray)
+      return (byte << 16) | (byte << 8) | byte
+    }
+
+    const rgbFromCmyk = (c: number, m: number, y: number, k: number) => {
+      const cyan = c > 1 ? c / 100 : c
+      const magenta = m > 1 ? m / 100 : m
+      const yellow = y > 1 ? y / 100 : y
+      const black = k > 1 ? k / 100 : k
+
+      return (
+        (clampByte(255 * (1 - cyan) * (1 - black)) << 16) |
+        (clampByte(255 * (1 - magenta) * (1 - black)) << 8) |
+        clampByte(255 * (1 - yellow) * (1 - black))
+      )
+    }
+
+    const addLayerColorObservation = (layerName: string, rgb: number) => {
+      let colorCounts = layerColorCounts.get(layerName)
+
+      if (!colorCounts) {
+        colorCounts = new Map<number, number>()
+        layerColorCounts.set(layerName, colorCounts)
+      }
+
+      colorCounts.set(rgb, (colorCounts.get(rgb) ?? 0) + 1)
+    }
+
+    const getCurrentOcgId = () => {
+      for (let i = markedContentStack.length - 1; i >= 0; i--) {
+        const id = markedContentStack[i]
+        if (id) return id
+      }
+
+      return undefined
+    }
+
+    const getCurrentLayerName = () => {
+      const ocgId = getCurrentOcgId()
+
+      if (!ocgId) return 'PDF_VECTOR'
+
+      return ocgIdToLayerName.get(ocgId) ?? `PDF_OCG_${ocgId}`
+    }
+
+    const tx = (x: number, y: number) => applyCtm(x, y).x * PT_TO_MM
+    const ty = (x: number, y: number) => (pageHeight - applyCtm(x, y).y) * PT_TO_MM
+
+    const flush = () => {
+      if (current.length > 1) {
+        subpaths.push(current)
+        subpathLayers.push(currentSubpathLayerName ?? getCurrentLayerName())
+        subpathStrokeColors.push(currentSubpathStrokeRgb ?? graphicsState.strokeRgb)
+        subpathFillColors.push(currentSubpathFillRgb ?? graphicsState.fillRgb)
+      }
+
+      current = []
+      currentSubpathLayerName = undefined
+      currentSubpathStrokeRgb = undefined
+      currentSubpathFillRgb = undefined
+    }
+
+    const commit = (paintMode: 'stroke' | 'fill' | 'mixed' = 'stroke') => {
+      flush()
+
+      for (let spIndex = 0; spIndex < subpaths.length; spIndex++) {
+        const sp = subpaths[spIndex]
+        const layerName = subpathLayers[spIndex] ?? getCurrentLayerName()
+        const entity = this.subpathToEntity(sp)
+
+        if (entity) {
+          const rgb =
+            paintMode === 'fill'
+              ? subpathFillColors[spIndex] ?? graphicsState.fillRgb
+              : subpathStrokeColors[spIndex] ?? graphicsState.strokeRgb
+
+          entity.layer = layerName
+          entity.color = new AcCmColor(AcCmColorMethod.ByColor, rgb)
+
+          addLayerColorObservation(layerName, rgb)
+
+          importedEntityLayerCounts.set(
+            layerName,
+            (importedEntityLayerCounts.get(layerName) ?? 0) + 1
+          )
+          result.push(entity)
+        }
+      }
+
       subpaths = []
+      subpathLayers = []
+      subpathStrokeColors = []
+      subpathFillColors = []
+    }
+
+    const discardPath = () => {
+      current = []
+      subpaths = []
+      subpathLayers = []
+      subpathStrokeColors = []
+      subpathFillColors = []
+      currentSubpathLayerName = undefined
+      currentSubpathStrokeRgb = undefined
+      currentSubpathFillRgb = undefined
     }
 
     const moveTo = (x: number, y: number) => {
       flush()
       curX = x
       curY = y
+      currentSubpathLayerName = getCurrentLayerName()
+      currentSubpathStrokeRgb = graphicsState.strokeRgb
+      currentSubpathFillRgb = graphicsState.fillRgb
       current = [{ x: tx(x, y), y: ty(x, y) }]
     }
 
@@ -413,21 +1021,13 @@ export class AcApPdfImportConvertor {
 
     const processPackedPathStream = (
       packedStream: ArrayLike<number>,
-      minMax?: ArrayLike<number>
+      _minMax?: ArrayLike<number>
     ) => {
       let index = 0
 
-      let maxAbs = 0
-      if (minMax) {
-        for (let i = 0; i < minMax.length; i++) {
-          maxAbs = Math.max(maxAbs, Math.abs(Number(minMax[i])))
-        }
-      }
-
-      // In this PDF.js output, packed path coordinates are fixed-point x100.
-      // Example from debug: 27118 means 271.18 PDF points.
-      const packedScale = maxAbs > pageHeight * 10 ? 0.01 : 1
-      const take = () => Number(packedStream[index++]) * packedScale
+      // Coordinates are transformed by the current PDF CTM.
+      // Do not apply the old x100 heuristic here, otherwise paths get double-scaled.
+      const take = () => Number(packedStream[index++])
 
       while (index < packedStream.length) {
         const pathOp = Number(packedStream[index++])
@@ -469,6 +1069,123 @@ export class AcApPdfImportConvertor {
       const rawArgs = argsArray[i] as unknown
 
       switch (fn) {
+        case OPS.save: {
+          graphicsStateStack.push({
+            ctm: cloneMatrix(graphicsState.ctm),
+            strokeRgb: graphicsState.strokeRgb,
+            fillRgb: graphicsState.fillRgb,
+            lineWidth: graphicsState.lineWidth
+          })
+          break
+        }
+
+        case OPS.restore: {
+          const restoredState = graphicsStateStack.pop()
+
+          if (restoredState) {
+            graphicsState = restoredState
+          }
+
+          break
+        }
+
+        case OPS.transform: {
+          const args = rawArgs as number[]
+
+          if (Array.isArray(args) && args.length >= 6) {
+            graphicsState.ctm = multiplyMatrix(graphicsState.ctm, [
+              Number(args[0]),
+              Number(args[1]),
+              Number(args[2]),
+              Number(args[3]),
+              Number(args[4]),
+              Number(args[5])
+            ])
+          }
+
+          break
+        }
+
+        case OPS.beginMarkedContent: {
+          markedContentStack.push(null)
+          break
+        }
+
+        case OPS.beginMarkedContentProps: {
+          const args = rawArgs as any[]
+          const tag = args?.[0]
+          const properties = args?.[1]
+
+          if (tag === 'OC' && properties?.id) {
+            markedContentStack.push(String(properties.id))
+          } else {
+            markedContentStack.push(null)
+          }
+
+          break
+        }
+
+        case OPS.endMarkedContent: {
+          if (markedContentStack.length > 0) {
+            markedContentStack.pop()
+          }
+
+          break
+        }
+
+        case OPS.clip:
+        case OPS.eoClip: {
+          break
+        }
+
+        // 3ECAD_PDF_COLOR_OPERATOR_CASES_START
+        case OPS.setStrokeRGBColor: {
+          const args = rawArgs as number[]
+          graphicsState.strokeRgb = rgbFromComponents(args[0], args[1], args[2])
+          break
+        }
+
+        case OPS.setFillRGBColor: {
+          const args = rawArgs as Array<number | string>
+          graphicsState.fillRgb = rgbFromComponents(
+            args[0],
+            args[1] as number | undefined,
+            args[2] as number | undefined
+          )
+          break
+        }
+
+        case OPS.setStrokeGray: {
+          const args = rawArgs as number[]
+          graphicsState.strokeRgb = rgbFromGray(args[0])
+          break
+        }
+
+        case OPS.setFillGray: {
+          const args = rawArgs as number[]
+          graphicsState.fillRgb = rgbFromGray(args[0])
+          break
+        }
+
+        case OPS.setStrokeCMYKColor: {
+          const args = rawArgs as number[]
+          graphicsState.strokeRgb = rgbFromCmyk(args[0], args[1], args[2], args[3])
+          break
+        }
+
+        case OPS.setFillCMYKColor: {
+          const args = rawArgs as number[]
+          graphicsState.fillRgb = rgbFromCmyk(args[0], args[1], args[2], args[3])
+          break
+        }
+
+        case OPS.setLineWidth: {
+          const args = rawArgs as number[]
+          graphicsState.lineWidth = Number(args?.[0] ?? graphicsState.lineWidth)
+          break
+        }
+        // 3ECAD_PDF_COLOR_OPERATOR_CASES_END
+
         case OPS.constructPath: {
           const constructArgs = rawArgs as any[]
 
@@ -544,21 +1261,34 @@ export class AcApPdfImportConvertor {
           break
         }
         case OPS.stroke:
+        case OPS.closeStroke: {
+          commit('stroke')
+          break
+        }
+
         case OPS.fill:
-        case OPS.eoFill:
+        case OPS.eoFill: {
+          commit('fill')
+          break
+        }
+
         case OPS.fillStroke:
         case OPS.eoFillStroke:
-        case OPS.closeStroke:
         case OPS.closeFillStroke:
-        case OPS.closeEOFillStroke:
+        case OPS.closeEOFillStroke: {
+          commit('mixed')
+          break
+        }
+
         case OPS.endPath: {
-          commit()
+          discardPath()
           break
         }
       }
     }
 
     commit()
+    ;(globalThis as any).__3ECAD_PDF_LAYER_ENTITY_COUNTS__ = Object.fromEntries(importedEntityLayerCounts)
     return result
   }
   private subpathToEntity(pts: Point2[]): AcDbPolyline | AcDbLine | null {
@@ -616,6 +1346,21 @@ function cubicBezier(
   }
   return pts
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
