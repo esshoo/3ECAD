@@ -506,7 +506,6 @@ export class AcApPdfImportConvertor {
       const docWithLayerService = context.doc as AcApContext['doc'] & {
         layerService?: {
           createLayers?: (names: string[]) => void
-          setLayerColor?: (layerName: string, color: AcCmColor) => boolean
         }
       }
 
@@ -547,9 +546,9 @@ export class AcApPdfImportConvertor {
           .padStart(6, '0')
           .toUpperCase()}`
 
-        const color = new AcCmColor(AcCmColorMethod.ByColor, rgb)
+        const layerColor = new AcCmColor(AcCmColorMethod.ByColor, rgb)
 
-        docWithLayerService.layerService?.setLayerColor?.(layerName, color)
+        docWithLayerService.layerService?.setLayerColor?.(layerName, layerColor)
 
         layerColorSummary[layerName] = colorText
       }
@@ -588,6 +587,9 @@ export class AcApPdfImportConvertor {
       }
 
       view?.zoomToFitDrawing?.()
+
+      context.doc.database.transactionManager.clearUndoStack()
+      ;(globalThis as any).__3ECAD_PDF_IMPORT_UNDO_STACK_CLEARED__ = true
 
       log.info(`[PdfImport] Imported ${entities.length} vector entities from PDF.`)
     } catch (err) {
@@ -694,10 +696,12 @@ export class AcApPdfImportConvertor {
     let subpathLayers: string[] = []
     let subpathStrokeColors: number[] = []
     let subpathFillColors: number[] = []
+    let subpathLineWidths: number[] = []
     let current: Point2[] = []
     let currentSubpathLayerName: string | undefined
     let currentSubpathStrokeRgb: number | undefined
     let currentSubpathFillRgb: number | undefined
+    let currentSubpathLineWidth: number | undefined
     const importedEntityLayerCounts = new Map<string, number>()
     let curX = 0
     let curY = 0
@@ -801,6 +805,29 @@ export class AcApPdfImportConvertor {
       )
     }
 
+    const pdfLineWidthToCadLineWeight = (lineWidthPt: number) => {
+      const lineWidthMm = Math.max(0, lineWidthPt * PT_TO_MM)
+
+      const standardWeights = [
+        0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50, 53, 60, 70, 80, 90, 100,
+        106, 120, 140, 158, 200, 211
+      ]
+
+      let best = standardWeights[0]
+      let bestDistance = Math.abs(lineWidthMm * 100 - best)
+
+      for (const weight of standardWeights) {
+        const distance = Math.abs(lineWidthMm * 100 - weight)
+
+        if (distance < bestDistance) {
+          best = weight
+          bestDistance = distance
+        }
+      }
+
+      return best
+    }
+
     const addLayerColorObservation = (layerName: string, rgb: number) => {
       let colorCounts = layerColorCounts.get(layerName)
 
@@ -838,12 +865,14 @@ export class AcApPdfImportConvertor {
         subpathLayers.push(currentSubpathLayerName ?? getCurrentLayerName())
         subpathStrokeColors.push(currentSubpathStrokeRgb ?? graphicsState.strokeRgb)
         subpathFillColors.push(currentSubpathFillRgb ?? graphicsState.fillRgb)
+        subpathLineWidths.push(currentSubpathLineWidth ?? graphicsState.lineWidth)
       }
 
       current = []
       currentSubpathLayerName = undefined
       currentSubpathStrokeRgb = undefined
       currentSubpathFillRgb = undefined
+      currentSubpathLineWidth = undefined
     }
 
     const commit = (paintMode: 'stroke' | 'fill' | 'mixed' = 'stroke') => {
@@ -862,6 +891,9 @@ export class AcApPdfImportConvertor {
 
           entity.layer = layerName
           entity.color = new AcCmColor(AcCmColorMethod.ByColor, rgb)
+          entity.lineWeight = pdfLineWidthToCadLineWeight(
+            subpathLineWidths[spIndex] ?? graphicsState.lineWidth
+          )
 
           addLayerColorObservation(layerName, rgb)
 
@@ -877,6 +909,7 @@ export class AcApPdfImportConvertor {
       subpathLayers = []
       subpathStrokeColors = []
       subpathFillColors = []
+      subpathLineWidths = []
     }
 
     const discardPath = () => {
@@ -885,9 +918,11 @@ export class AcApPdfImportConvertor {
       subpathLayers = []
       subpathStrokeColors = []
       subpathFillColors = []
+      subpathLineWidths = []
       currentSubpathLayerName = undefined
       currentSubpathStrokeRgb = undefined
       currentSubpathFillRgb = undefined
+      currentSubpathLineWidth = undefined
     }
 
     const moveTo = (x: number, y: number) => {
@@ -897,6 +932,7 @@ export class AcApPdfImportConvertor {
       currentSubpathLayerName = getCurrentLayerName()
       currentSubpathStrokeRgb = graphicsState.strokeRgb
       currentSubpathFillRgb = graphicsState.fillRgb
+      currentSubpathLineWidth = graphicsState.lineWidth
       current = [{ x: tx(x, y), y: ty(x, y) }]
     }
 
@@ -1346,6 +1382,11 @@ function cubicBezier(
   }
   return pts
 }
+
+
+
+
+
 
 
 
