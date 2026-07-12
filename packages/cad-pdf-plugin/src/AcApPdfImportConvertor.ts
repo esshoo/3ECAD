@@ -5,6 +5,7 @@ import {
   AcDbLine,
   AcDbPolyline,
   AcDbRasterImage,
+  AcDbText,
   AcGePoint2d,
   AcGePoint3d,
   log
@@ -29,7 +30,7 @@ const PDF_BACKGROUND_LAYER = 'PDF_PAGE_1_BACKGROUND'
 /** 2D point in PDF user space before conversion to model-space mm. */
 type Point2 = { x: number; y: number }
 
-type PdfImportEntity = AcDbPolyline | AcDbLine | AcDbRasterImage
+type PdfImportEntity = AcDbPolyline | AcDbLine | AcDbRasterImage | AcDbText
 
 type ViewLike = {
   addEntity?: (entity: PdfImportEntity) => void
@@ -221,6 +222,9 @@ export class AcApPdfImportConvertor {
 
       const analyzeOperatorCounts: Record<string, number> = {}
       const analyzeSamples: Record<string, any[]> = {}
+      const textRawSamples: any[] = []
+      const fontRawSamples: any[] = []
+      const textMatrixRawSamples: any[] = []
       const markedContentSamples: any[] = []
       const paintSequenceSamples: any[] = []
 
@@ -242,6 +246,56 @@ export class AcApPdfImportConvertor {
               args: compactPdfArg(args)
             })
           }
+        }
+
+        if (name === 'showText' && textRawSamples.length < 24) {
+          const glyphs = Array.isArray(args?.[0]) ? args[0] : []
+          textRawSamples.push({
+            index: opIndex,
+            glyphCount: glyphs.length,
+            text: glyphs
+              .map((glyph: any) => {
+                if (typeof glyph === 'string') return glyph
+                if (typeof glyph?.unicode === 'string') return glyph.unicode
+                if (typeof glyph?.str === 'string') return glyph.str
+                if (typeof glyph?.fontChar === 'string') return glyph.fontChar
+                return ''
+              })
+              .join(''),
+            glyphs: glyphs.slice(0, 12).map((glyph: any) => {
+              if (typeof glyph === 'string') {
+                return { type: 'string', value: glyph }
+              }
+
+              if (!glyph || typeof glyph !== 'object') {
+                return { type: typeof glyph, value: glyph }
+              }
+
+              return {
+                keys: Object.keys(glyph),
+                unicode: glyph.unicode,
+                str: glyph.str,
+                fontChar: glyph.fontChar,
+                width: glyph.width,
+                isSpace: glyph.isSpace,
+                originalCharCode: glyph.originalCharCode
+              }
+            })
+          })
+        }
+
+        if (name === 'setFont' && fontRawSamples.length < 24) {
+          fontRawSamples.push({
+            index: opIndex,
+            args
+          })
+        }
+
+        if (name === 'setTextMatrix' && textMatrixRawSamples.length < 24) {
+          textMatrixRawSamples.push({
+            index: opIndex,
+            args
+          })
         }
 
         if (name === 'beginMarkedContent' || name === 'beginMarkedContentProps') {
@@ -435,6 +489,9 @@ export class AcApPdfImportConvertor {
         optionalContentDebug,
         operatorCounts: analyzeOperatorCounts,
         samples: analyzeSamples,
+        textRawSamples,
+        fontRawSamples,
+        textMatrixRawSamples,
         markedContentSamples,
         paintSequenceSamples
       }
@@ -1129,6 +1186,128 @@ export class AcApPdfImportConvertor {
     const tx = (x: number, y: number) => pagePointToCadPoint(x, y).x
     const ty = (x: number, y: number) => pagePointToCadPoint(x, y).y
 
+    // 3ECAD_PDF_TEXT_IMPORT_START
+    let currentPdfFontName = ''
+    let currentPdfFontSize = 12
+    let currentTextMatrix: number[] = [1, 0, 0, 1, 0, 0]
+    const importedPdfTexts: any[] = []
+
+    const readMatrixValue = (
+      value: unknown,
+      index: number,
+      fallback: number
+    ) => {
+      const matrix = value as any
+      if (matrix == null) return fallback
+
+      const rawValue = matrix[index] ?? matrix[String(index)]
+
+      return Number.isFinite(Number(rawValue)) ? Number(rawValue) : fallback
+    }
+
+    const readPdfMatrix = (rawValue: unknown): number[] | null => {
+      const rawArray = rawValue as any[]
+      const matrix =
+        Array.isArray(rawArray) && rawArray.length === 1
+          ? rawArray[0]
+          : rawValue
+
+      if (matrix == null) return null
+
+      return [
+        readMatrixValue(matrix, 0, 1),
+        readMatrixValue(matrix, 1, 0),
+        readMatrixValue(matrix, 2, 0),
+        readMatrixValue(matrix, 3, 1),
+        readMatrixValue(matrix, 4, 0),
+        readMatrixValue(matrix, 5, 0)
+      ]
+    }
+
+    const glyphsToUnicodeText = (value: unknown): string => {
+      if (value == null) return ''
+
+      if (typeof value === 'string') return value
+      if (typeof value === 'number') return ''
+
+      if (Array.isArray(value)) {
+        return value.map(item => glyphsToUnicodeText(item)).join('')
+      }
+
+      const glyph = value as any
+
+      if (typeof glyph.unicode === 'string') return glyph.unicode
+      if (typeof glyph.str === 'string') return glyph.str
+
+      return ''
+    }
+
+    const textMatrixPointToCadPoint = (x: number, y: number) => {
+      const [a, b, c, d, e, f] = currentTextMatrix
+
+      return pagePointToCadPoint(
+        a * x + c * y + e,
+        b * x + d * y + f
+      )
+    }
+
+    const importPdfText = (rawTextValue: unknown) => {
+      const textString = glyphsToUnicodeText(rawTextValue).replace(/\u0000/g, '')
+
+      if (textString.trim().length === 0) return
+
+      const origin = textMatrixPointToCadPoint(0, 0)
+      const xAxis = textMatrixPointToCadPoint(1, 0)
+      const yAxis = textMatrixPointToCadPoint(0, 1)
+
+      if (!Number.isFinite(origin.x) || !Number.isFinite(origin.y)) return
+
+      const xAxisLength = Math.hypot(xAxis.x - origin.x, xAxis.y - origin.y)
+      const yAxisLength = Math.hypot(yAxis.x - origin.x, yAxis.y - origin.y)
+
+            const rawHeight =
+        Math.abs(currentPdfFontSize) * Math.max(xAxisLength, yAxisLength)
+
+      // PDF font metrics do not match the viewer default CAD text font exactly.
+      // Dimensions stay closer to original size, labels/room names are reduced more.
+      const hasLetters = /[A-Za-z\u0600-\u06FF]/.test(textString)
+      const textHeightScale = hasLetters ? 0.45 : 0.75
+
+      const height = Math.max(0.1, rawHeight * textHeightScale)
+
+      if (!Number.isFinite(height) || height <= 0) return
+
+      const text = new AcDbText()
+      const layerName = getCurrentLayerName()
+
+      text.textString = textString
+      text.position = new AcGePoint3d(origin.x, origin.y, 0)
+      text.height = height
+      text.rotation = Math.atan2(xAxis.y - origin.y, xAxis.x - origin.x)
+      text.layer = layerName
+
+      result.push(text)
+
+      importedEntityLayerCounts.set(
+        layerName,
+        (importedEntityLayerCounts.get(layerName) ?? 0) + 1
+      )
+
+      if (importedPdfTexts.length < 256) {
+        importedPdfTexts.push({
+          text: textString,
+          layerName,
+          fontName: currentPdfFontName,
+          fontSize: currentPdfFontSize,
+          x: text.position.x,
+          y: text.position.y,
+          height: text.height,
+          rotation: text.rotation
+        })
+      }
+    }
+    // 3ECAD_PDF_TEXT_IMPORT_END
+
     const flush = () => {
       if (current.length > 1) {
         subpaths.push(current)
@@ -1601,6 +1780,35 @@ export class AcApPdfImportConvertor {
           break
         }
         // 3ECAD_PDF_IMAGE_XOBJECT_IMPORT_END
+        // 3ECAD_PDF_TEXT_OPERATOR_CASES_START
+        case OPS.setFont: {
+          const args = rawArgs as Array<string | number>
+          currentPdfFontName = String(args?.[0] ?? '')
+          currentPdfFontSize = Number(args?.[1] ?? currentPdfFontSize)
+
+          break
+        }
+
+        case OPS.setTextMatrix: {
+          const matrix = readPdfMatrix(rawArgs)
+
+          if (matrix) {
+            currentTextMatrix = matrix
+          }
+
+          break
+        }
+
+        case OPS.showText:
+        case OPS.showSpacedText:
+        case OPS.nextLineShowText: {
+          const args = rawArgs as any[]
+          importPdfText(args?.[0])
+
+          break
+        }
+        // 3ECAD_PDF_TEXT_OPERATOR_CASES_END
+
         case OPS.constructPath: {
           const constructArgs = rawArgs as any[]
 
@@ -1705,6 +1913,7 @@ export class AcApPdfImportConvertor {
     commit()
     ;(globalThis as any).__3ECAD_PDF_LAYER_ENTITY_COUNTS__ = Object.fromEntries(importedEntityLayerCounts)
     ;(globalThis as any).__3ECAD_PDF_IMAGE_IMPORTS__ = importedPdfImages
+    ;(globalThis as any).__3ECAD_PDF_TEXT_IMPORTS__ = importedPdfTexts
     return result
   }
   private subpathToEntity(pts: Point2[]): AcDbPolyline | AcDbLine | null {
@@ -1762,6 +1971,13 @@ function cubicBezier(
   }
   return pts
 }
+
+
+
+
+
+
+
 
 
 
