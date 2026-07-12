@@ -21,6 +21,20 @@
         @create="onViewerCreate"
         :base-url="BASE_URL"
       />
+
+      <Teleport v-if="pdfPageCount > 1" to=".ml-status-bar-left-button-group">
+        <button
+          v-for="pageNumber in pdfPageCount"
+          :key="pageNumber"
+          type="button"
+          class="el-button ml-status-bar-layout-button pdf-page-layout-button"
+          :class="{ 'el-button--primary': pageNumber === currentPdfPage }"
+          :disabled="isPdfPageLoading"
+          @click="switchPdfPage(pageNumber)"
+        >
+          <span>Page {{ pageNumber }}</span>
+        </button>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -37,7 +51,7 @@ import {
 import { MlCadViewer } from '@mlightcad/cad-viewer'
 import { AcApPdfImportConvertor } from '@mlightcad/cad-pdf-plugin'
 import { log } from '@mlightcad/data-model'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { AcApQuitCmd } from './commands'
 import FileUpload from './components/FileUpload.vue'
@@ -85,6 +99,33 @@ const drawNoPlotLayers = ref(false)
 const progressiveRendering = ref(false)
 const openViewMode = ref<AcApOpenViewMode | undefined>(undefined)
 const pendingPdfFile = ref<File | null>(null)
+const currentPdfFile = ref<File | null>(null)
+const pdfPageCount = ref(0)
+const currentPdfPage = ref(1)
+const isPdfPageLoading = ref(false)
+
+const handlePdfLayoutTabsWheel = (event: WheelEvent) => {
+  const target = event.target as HTMLElement | null
+  const tabGroup = target?.closest?.('.ml-status-bar-left-button-group') as
+    | HTMLElement
+    | null
+
+  if (!tabGroup) return
+  if (tabGroup.scrollWidth <= tabGroup.clientWidth) return
+
+  event.preventDefault()
+  tabGroup.scrollLeft += event.deltaY || event.deltaX
+}
+
+onMounted(() => {
+  window.addEventListener('wheel', handlePdfLayoutTabsWheel, {
+    passive: false
+  })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('wheel', handlePdfLayoutTabsWheel)
+})
 
 const createNewDrawing = async (): Promise<boolean> => {
   const success = await AcApDocManager.instance.newDocument({
@@ -125,20 +166,69 @@ const getCurrentContext = (
 const isPdfFile = (file: File): boolean =>
   file.name.toLowerCase().endsWith('.pdf')
 
+const getPdfPageCount = async (file: File): Promise<number> => {
+  const buffer = await file.arrayBuffer()
+  const convertor = new AcApPdfImportConvertor()
+
+  return convertor.getPageCount(buffer)
+}
+
 const importPdfIntoCurrentDrawing = async (
   file: File,
-  eventContext?: AcApContext
-) => {
+  eventContext?: AcApContext,
+  pageNumber = 1
+): Promise<boolean> => {
   const context = getCurrentContext(eventContext)
 
   if (!context) {
     log.error('[PdfImport] Failed: AcApContext is not available.')
-    return
+    return false
   }
 
   const buffer = await file.arrayBuffer()
   const convertor = new AcApPdfImportConvertor()
-  await convertor.convert(context, buffer, 1)
+  await convertor.convert(context, buffer, pageNumber)
+
+  return true
+}
+
+const openPdfIntoCurrentDrawing = async (
+  file: File,
+  eventContext?: AcApContext
+) => {
+  currentPdfFile.value = file
+  currentPdfPage.value = 1
+  pdfPageCount.value = Math.max(1, await getPdfPageCount(file))
+
+  await importPdfIntoCurrentDrawing(file, eventContext, 1)
+}
+
+const switchPdfPage = async (pageNumber: number) => {
+  if (!currentPdfFile.value) return
+  if (isPdfPageLoading.value) return
+  if (pageNumber === currentPdfPage.value) return
+  if (pageNumber < 1 || pageNumber > pdfPageCount.value) return
+
+  isPdfPageLoading.value = true
+
+  try {
+    const success = await createNewDrawing()
+    if (!success) return
+
+    await nextTick()
+
+    const imported = await importPdfIntoCurrentDrawing(
+      currentPdfFile.value,
+      undefined,
+      pageNumber
+    )
+
+    if (imported) {
+      currentPdfPage.value = pageNumber
+    }
+  } finally {
+    isPdfPageLoading.value = false
+  }
 }
 
 const onViewerCreate = async (eventContext?: AcApContext) => {
@@ -154,7 +244,7 @@ const onViewerCreate = async (eventContext?: AcApContext) => {
     await nextTick()
     const file = pendingPdfFile.value
     pendingPdfFile.value = null
-    await importPdfIntoCurrentDrawing(file, eventContext)
+    await openPdfIntoCurrentDrawing(file, eventContext)
   }
 }
 
@@ -191,12 +281,18 @@ const handleFileSelect = (
 
   if (isPdfFile(file)) {
     pendingPdfFile.value = file
+    currentPdfFile.value = file
+    pdfPageCount.value = 0
+    currentPdfPage.value = 1
     store.selectedFile = null
     store.isNewDrawing = true
     return
   }
 
   pendingPdfFile.value = null
+  currentPdfFile.value = null
+  pdfPageCount.value = 0
+  currentPdfPage.value = 1
   store.isNewDrawing = false
   store.selectedFile = file
 }
@@ -209,6 +305,9 @@ const handleNewDrawing = (
   viewMode: AcApOpenViewMode | undefined
 ) => {
   pendingPdfFile.value = null
+  currentPdfFile.value = null
+  pdfPageCount.value = 0
+  currentPdfPage.value = 1
   store.selectedFile = null
   store.isNewDrawing = true
   applyOpenOptions(
@@ -244,4 +343,44 @@ const handleNewDrawing = (
   z-index: 1000;
   pointer-events: auto; /* Allow clicks on upload screen */
 }
+</style>
+
+
+
+
+
+<style scoped>
+.pdf-page-layout-button {
+  margin-left: 0;
+}
+</style>
+
+<style>
+/* PDF_LAYOUT_TABS_HIDDEN_SCROLL_START */
+.ml-status-bar-left {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ml-status-bar-left-button-group {
+  max-width: min(72vw, calc(100vw - 420px));
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+}
+
+.ml-status-bar-left-button-group::-webkit-scrollbar {
+  display: none;
+}
+
+.ml-status-bar-left-button-group .ml-status-bar-layout-button,
+.ml-status-bar-left-button-group .pdf-page-layout-button {
+  flex: 0 0 auto;
+}
+/* PDF_LAYOUT_TABS_HIDDEN_SCROLL_END */
 </style>

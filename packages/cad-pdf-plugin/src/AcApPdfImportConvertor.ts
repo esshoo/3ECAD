@@ -41,6 +41,13 @@ type ViewLike = {
  * model space.
  */
 export class AcApPdfImportConvertor {
+
+  async getPageCount(data: ArrayBuffer): Promise<number> {
+    const pdf = await pdfjsLib.getDocument({ data }).promise
+
+    return pdf.numPages
+  }
+
   /**
    * Prompts the user to pick a PDF file and imports vector geometry.
    *
@@ -1755,6 +1762,7 @@ function cubicBezier(
   }
   return pts
 }
+
 
 
 
