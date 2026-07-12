@@ -79,6 +79,19 @@ export class AcApPdfImportConvertor {
       const viewport = page.getViewport({ scale: 1 })
       const pageHeight = viewport.height
 
+      const pageLike = page as PDFPageProxy & {
+        rotate?: number
+        view?: unknown
+      }
+
+      ;(globalThis as any).__3ECAD_PDF_PAGE_INFO__ = {
+        rotate: pageLike.rotate,
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+        view: pageLike.view
+      }
+
+
       const operatorList = await page.getOperatorList()
 
       const opNameByCode = new Map<number, string>(
@@ -513,7 +526,8 @@ export class AcApPdfImportConvertor {
 
       const layerColorCounts = new Map<string, Map<number, number>>()
 
-      const entities = this.extractEntities(
+      const entities = await this.extractEntities(
+        page,
         operatorList,
         pageHeight,
         ocgIdToLayerName,
@@ -675,15 +689,236 @@ export class AcApPdfImportConvertor {
     return (context as AcApContext & { view?: ViewLike }).view
   }
 
-  private extractEntities(
+
+  private async getPdfImageObject(
+    page: PDFPageProxy,
+    imageId: string
+  ): Promise<unknown | undefined> {
+    const pageLike = page as PDFPageProxy & {
+      objs?: {
+        get?: (...args: any[]) => any
+      }
+    }
+
+    const objs = pageLike.objs
+
+    if (!objs?.get) {
+      return undefined
+    }
+
+    try {
+      const value = objs.get(imageId)
+
+      if (value !== undefined) {
+        return value
+      }
+    } catch {
+      // Some PDF.js objects are only available through the callback form.
+    }
+
+    return await new Promise(resolve => {
+      let resolved = false
+
+      const finish = (value: unknown | undefined) => {
+        if (resolved) return
+
+        resolved = true
+        resolve(value)
+      }
+
+      try {
+        const value = objs.get?.(imageId, (objectValue: unknown) => {
+          finish(objectValue)
+        })
+
+        if (value !== undefined) {
+          finish(value)
+        }
+      } catch {
+        finish(undefined)
+      }
+
+      window.setTimeout(() => finish(undefined), 2000)
+    })
+  }
+
+  private async pdfImageObjectToPngBlob(
+    imageObject: unknown
+  ): Promise<{ blob: Blob; width: number; height: number } | undefined> {
+    const imageLike = imageObject as {
+      width?: number
+      height?: number
+      data?: ArrayLike<number>
+      bitmap?: CanvasImageSource
+    }
+
+    const drawable = imageLike?.bitmap ?? imageObject
+
+    const isDrawable =
+      (typeof ImageBitmap !== 'undefined' && drawable instanceof ImageBitmap) ||
+      drawable instanceof HTMLCanvasElement ||
+      drawable instanceof HTMLImageElement
+
+    if (isDrawable) {
+      const width = Math.max(1, Math.round(Number((drawable as any).width ?? imageLike.width ?? 0)))
+      const height = Math.max(1, Math.round(Number((drawable as any).height ?? imageLike.height ?? 0)))
+
+      const canvas = document.createElement('canvas')
+      const canvasContext = canvas.getContext('2d')
+
+      if (!canvasContext) {
+        return undefined
+      }
+
+      canvas.width = width
+      canvas.height = height
+      canvasContext.drawImage(drawable as CanvasImageSource, 0, 0, width, height)
+
+      return {
+        blob: await this.canvasToPngBlob(canvas),
+        width,
+        height
+      }
+    }
+
+    const width = Math.max(1, Math.round(Number(imageLike?.width ?? 0)))
+    const height = Math.max(1, Math.round(Number(imageLike?.height ?? 0)))
+    const data = imageLike?.data
+
+    if (!data || !width || !height) {
+      return undefined
+    }
+
+    const pixelCount = width * height
+    const sourceLength = Number((data as { length?: number }).length ?? 0)
+
+    if (sourceLength <= 0) {
+      return undefined
+    }
+
+    const rgba = new Uint8ClampedArray(pixelCount * 4)
+    const clampByte = (value: number) =>
+      Math.max(0, Math.min(255, Math.round(Number(value))))
+
+    if (sourceLength >= pixelCount * 4) {
+      for (let i = 0; i < pixelCount; i++) {
+        const src = i * 4
+        const dst = i * 4
+
+        rgba[dst] = clampByte(data[src])
+        rgba[dst + 1] = clampByte(data[src + 1])
+        rgba[dst + 2] = clampByte(data[src + 2])
+        rgba[dst + 3] = clampByte(data[src + 3] ?? 255)
+      }
+    } else if (sourceLength >= pixelCount * 3) {
+      for (let i = 0; i < pixelCount; i++) {
+        const src = i * 3
+        const dst = i * 4
+
+        rgba[dst] = clampByte(data[src])
+        rgba[dst + 1] = clampByte(data[src + 1])
+        rgba[dst + 2] = clampByte(data[src + 2])
+        rgba[dst + 3] = 255
+      }
+    } else if (sourceLength >= pixelCount) {
+      for (let i = 0; i < pixelCount; i++) {
+        const gray = clampByte(data[i])
+        const dst = i * 4
+
+        rgba[dst] = gray
+        rgba[dst + 1] = gray
+        rgba[dst + 2] = gray
+        rgba[dst + 3] = 255
+      }
+    } else {
+      return undefined
+    }
+
+    const canvas = document.createElement('canvas')
+    const canvasContext = canvas.getContext('2d')
+
+    if (!canvasContext) {
+      return undefined
+    }
+
+    canvas.width = width
+    canvas.height = height
+    canvasContext.putImageData(new ImageData(rgba, width, height), 0, 0)
+
+    return {
+      blob: await this.canvasToPngBlob(canvas),
+      width,
+      height
+    }
+  }
+  
+    private async rotatePngBlobQuarterTurns(
+    blob: Blob,
+    width: number,
+    height: number,
+    quarterTurns: number
+  ): Promise<{ blob: Blob; width: number; height: number }> {
+    const turns = ((quarterTurns % 4) + 4) % 4
+
+    if (turns === 0) {
+      return { blob, width, height }
+    }
+
+    const bitmap = await createImageBitmap(blob)
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+
+    if (!ctx) {
+      return { blob, width, height }
+    }
+
+    if (turns % 2 === 1) {
+      canvas.width = height
+      canvas.height = width
+    } else {
+      canvas.width = width
+      canvas.height = height
+    }
+
+    switch (turns) {
+      case 1: {
+        // +90° mathematically (CCW in CAD space)
+        ctx.translate(0, canvas.height)
+        ctx.rotate(-Math.PI / 2)
+        break
+      }
+      case 2: {
+        ctx.translate(canvas.width, canvas.height)
+        ctx.rotate(Math.PI)
+        break
+      }
+      case 3: {
+        // -90° mathematically
+        ctx.translate(canvas.width, 0)
+        ctx.rotate(Math.PI / 2)
+        break
+      }
+    }
+
+    ctx.drawImage(bitmap, 0, 0, width, height)
+
+    return {
+      blob: await this.canvasToPngBlob(canvas),
+      width: canvas.width,
+      height: canvas.height
+    }
+  }
+  
+  private async extractEntities(
+    page: PDFPageProxy,
     opList: PDFOperatorList,
-    pageHeight: number,
+    _pageHeight: number,
     ocgIdToLayerName: Map<string, string>,
     layerColorCounts: Map<string, Map<number, number>>
-  ): (AcDbPolyline | AcDbLine)[] {
+  ): Promise<PdfImportEntity[]> {
     const { OPS } = pdfjsLib
     const { fnArray, argsArray } = opList
-    const result: (AcDbPolyline | AcDbLine)[] = []
+    const result: PdfImportEntity[] = []
 
     // PDF.js constructPath uses DrawOPS numbers, not OPS.moveTo/lineTo directly.
     const DRAW_MOVE_TO = 0
@@ -703,6 +938,7 @@ export class AcApPdfImportConvertor {
     let currentSubpathFillRgb: number | undefined
     let currentSubpathLineWidth: number | undefined
     const importedEntityLayerCounts = new Map<string, number>()
+    const importedPdfImages: Array<Record<string, unknown>> = []
     let curX = 0
     let curY = 0
 
@@ -856,8 +1092,35 @@ export class AcApPdfImportConvertor {
       return ocgIdToLayerName.get(ocgId) ?? `PDF_OCG_${ocgId}`
     }
 
-    const tx = (x: number, y: number) => applyCtm(x, y).x * PT_TO_MM
-    const ty = (x: number, y: number) => (pageHeight - applyCtm(x, y).y) * PT_TO_MM
+    const pageViewport = page.getViewport({ scale: 1 }) as unknown as {
+      width: number
+      height: number
+      convertToViewportPoint?: (x: number, y: number) => number[]
+    }
+
+    const pagePointToCadPoint = (x: number, y: number) => {
+      const transformed = applyCtm(x, y)
+
+      if (typeof pageViewport.convertToViewportPoint === 'function') {
+        const [viewportX, viewportY] = pageViewport.convertToViewportPoint(
+          transformed.x,
+          transformed.y
+        )
+
+        return {
+          x: viewportX * PT_TO_MM,
+          y: (pageViewport.height - viewportY) * PT_TO_MM
+        }
+      }
+
+      return {
+        x: transformed.x * PT_TO_MM,
+        y: transformed.y * PT_TO_MM
+      }
+    }
+
+    const tx = (x: number, y: number) => pagePointToCadPoint(x, y).x
+    const ty = (x: number, y: number) => pagePointToCadPoint(x, y).y
 
     const flush = () => {
       if (current.length > 1) {
@@ -1222,6 +1485,115 @@ export class AcApPdfImportConvertor {
         }
         // 3ECAD_PDF_COLOR_OPERATOR_CASES_END
 
+        // 3ECAD_PDF_IMAGE_XOBJECT_IMPORT_START
+        case OPS.paintImageXObject: {
+          const args = rawArgs as Array<string | number>
+          const imageId = String(args?.[0] ?? '')
+
+          if (!imageId) {
+            break
+          }
+
+          const pdfImageObject = await this.getPdfImageObject(page, imageId)
+          const pngImage = await this.pdfImageObjectToPngBlob(pdfImageObject)
+
+          if (!pngImage) {
+            log.warn(`[PdfImport] Could not import PDF image object ${imageId}.`)
+            break
+          }
+
+          const p0 = { x: tx(0, 0), y: ty(0, 0) }
+          const p1 = { x: tx(1, 0), y: ty(1, 0) }
+          const p2 = { x: tx(0, 1), y: ty(0, 1) }
+
+          const rawWidth = Math.hypot(p1.x - p0.x, p1.y - p0.y)
+          const rawHeight = Math.hypot(p2.x - p0.x, p2.y - p0.y)
+
+          if (
+            !Number.isFinite(rawWidth) ||
+            !Number.isFinite(rawHeight) ||
+            rawWidth <= 0 ||
+            rawHeight <= 0
+          ) {
+            break
+          }
+
+          const rawRotation = Math.atan2(p1.y - p0.y, p1.x - p0.x)
+          const snappedQuarterTurns = Math.round(rawRotation / (Math.PI / 2))
+          const snappedRotation = snappedQuarterTurns * (Math.PI / 2)
+          const isRightAngleRotation =
+            Math.abs(rawRotation - snappedRotation) < 0.001
+
+          let imageBlob = pngImage.blob
+          let imagePixelWidth = pngImage.width
+          let imagePixelHeight = pngImage.height
+
+          const image = new AcDbRasterImage()
+          const layerName = getCurrentLayerName()
+
+          image.layer = layerName
+          image.isImageShown = true
+          image.isImageTransparent = false
+          image.isClipped = false
+
+          if (isRightAngleRotation && snappedQuarterTurns % 4 !== 0) {
+            const rotatedImage = await this.rotatePngBlobQuarterTurns(
+              imageBlob,
+              imagePixelWidth,
+              imagePixelHeight,
+              snappedQuarterTurns
+            )
+
+            imageBlob = rotatedImage.blob
+            imagePixelWidth = rotatedImage.width
+            imagePixelHeight = rotatedImage.height
+
+            const p3 = {
+              x: p1.x + p2.x - p0.x,
+              y: p1.y + p2.y - p0.y
+            }
+
+            const minX = Math.min(p0.x, p1.x, p2.x, p3.x)
+            const maxX = Math.max(p0.x, p1.x, p2.x, p3.x)
+            const minY = Math.min(p0.y, p1.y, p2.y, p3.y)
+            const maxY = Math.max(p0.y, p1.y, p2.y, p3.y)
+
+            image.position = new AcGePoint3d(minX, minY, 0)
+            image.width = maxX - minX
+            image.height = maxY - minY
+            image.rotation = 0
+          } else {
+            image.position = new AcGePoint3d(p0.x, p0.y, 0)
+            image.width = rawWidth
+            image.height = rawHeight
+            image.rotation = rawRotation
+          }
+
+          image.image = imageBlob
+          image.imageSize = new AcGePoint2d(imagePixelWidth, imagePixelHeight)
+
+          result.push(image)
+
+          importedPdfImages.push({
+            imageId,
+            layerName,
+            pixelWidth: imagePixelWidth,
+            pixelHeight: imagePixelHeight,
+            width: image.width,
+            height: image.height,
+            x: image.position.x,
+            y: image.position.y,
+            rotation: image.rotation,
+            rawRotation,
+            bakedQuarterTurns:
+              isRightAngleRotation && snappedQuarterTurns % 4 !== 0
+                ? snappedQuarterTurns
+                : 0
+          })
+
+          break
+        }
+        // 3ECAD_PDF_IMAGE_XOBJECT_IMPORT_END
         case OPS.constructPath: {
           const constructArgs = rawArgs as any[]
 
@@ -1325,6 +1697,7 @@ export class AcApPdfImportConvertor {
 
     commit()
     ;(globalThis as any).__3ECAD_PDF_LAYER_ENTITY_COUNTS__ = Object.fromEntries(importedEntityLayerCounts)
+    ;(globalThis as any).__3ECAD_PDF_IMAGE_IMPORTS__ = importedPdfImages
     return result
   }
   private subpathToEntity(pts: Point2[]): AcDbPolyline | AcDbLine | null {
@@ -1382,6 +1755,14 @@ function cubicBezier(
   }
   return pts
 }
+
+
+
+
+
+
+
+
 
 
 
