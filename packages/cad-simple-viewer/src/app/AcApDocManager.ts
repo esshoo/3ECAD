@@ -1,4 +1,4 @@
-import {
+﻿import {
   AcCmColor,
   AcCmEventManager,
   AcDbDatabaseConverterManager,
@@ -776,7 +776,7 @@ export class AcApDocManager {
    *
    * This method loads either the specified fonts or the configured default font
    * fallback chains ({@link DEFAULT_FONTS_PRESET}, currently `modern`: text
-   * `hztxt` 鈫?`simsun`, symbol `amgdt`) if no fonts are provided. The loaded
+   * `hztxt` éˆ«?`simsun`, symbol `amgdt`) if no fonts are provided. The loaded
    * fonts are used for rendering CAD text entities like MText and Text in the viewer.
    *
    * It is better to load default fonts when viewer is initialized so that the viewer can
@@ -1290,10 +1290,14 @@ export class AcApDocManager {
     const lines = source.replace(/\r\n/g, '\n').split('\n')
     if (!lines.length) return []
 
-    const cmdName = lines[0].trim()
+    const firstLine = lines[0].trim()
+    if (!firstLine) return []
+
+    const firstLineParts = firstLine.split(/\s+/)
+    const cmdName = firstLineParts.shift()?.trim()
     if (!cmdName) return []
 
-    return [cmdName, ...lines.slice(1)]
+    return [cmdName, ...firstLineParts, ...lines.slice(1)]
   }
 
   /**
@@ -1368,7 +1372,7 @@ export class AcApDocManager {
       //    paper sheet rectangle (`AcDbLayout.limits`). Real-world DWGs
       //    frequently mix scales inside paper space (e.g. a title block
       //    authored in mm alongside viewport rectangles authored in m),
-      //    so the entity bounding box is unreliable here 鈥?it gets
+      //    so the entity bounding box is unreliable here éˆ¥?it gets
       //    dominated by the largest-scale outliers and shrinks the
       //    actual paper to a grain.
       //
@@ -1379,13 +1383,13 @@ export class AcApDocManager {
       //    `*ACTIVE`, then frame EXTMIN/EXTMAX when no saved view exists.
       //
       // 4. **Fallback** (paper without limits, or model with empty
-      //    extents 鈥?typically DXF): poll `zoomToFitDrawing` and frame
+      //    extents éˆ¥?typically DXF): poll `zoomToFitDrawing` and frame
       //    the populated layout bounding box once entities land.
       //
       // The pre-fix code used `db.extmin/db.extmax` (always model-space
       // EXTMIN/EXTMAX sysvars) even when opening into paper, landing on
       // coordinates that don't exist in paper WCS. Paper layout would
-      // render zoomed into a random quadrant 鈥?title block looking
+      // render zoomed into a random quadrant éˆ¥?title block looking
       // giant, viewport collapsed to pixels. See
       // `next_14_viewports_full.md` Bug C-open.
       const modelSpaceId = db.tables.blockTable.modelSpace.objectId
@@ -1693,3 +1697,6 @@ export class AcApDocManager {
     }
   }
 }
+
+
+

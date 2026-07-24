@@ -10,6 +10,7 @@ import {
   AcGePoint3d,
   log
 } from '@mlightcad/data-model'
+import { getThreeEcadTextSettings } from './threeEcadTextSettings'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import type {
@@ -1271,7 +1272,8 @@ export class AcApPdfImportConvertor {
       // PDF font metrics do not match the viewer default CAD text font exactly.
       // Dimensions stay closer to original size, labels/room names are reduced more.
       const hasLetters = /[A-Za-z\u0600-\u06FF]/.test(textString)
-      const textHeightScale = hasLetters ? 0.45 : 0.75
+      const threeEcadTextSettings = getThreeEcadTextSettings()
+      const textHeightScale = hasLetters ? threeEcadTextSettings.textLabelScale : threeEcadTextSettings.textNumberScale
 
       const height = Math.max(0.1, rawHeight * textHeightScale)
 
@@ -1971,6 +1973,7 @@ function cubicBezier(
   }
   return pts
 }
+
 
 
 

@@ -2,11 +2,12 @@
 
 import en from './en'
 import zh from './zh'
+import ar from './ar'
 
 export const initializeLocale = () => {
   AcApI18n.mergeLocaleMessage('en', en)
   AcApI18n.mergeLocaleMessage('zh', zh)
+  AcApI18n.mergeLocaleMessage('ar' as any, ar)
 }
-
 
 

@@ -1,4 +1,4 @@
-import { AcApDocManager, AcApSettingManager } from '../../../app'
+﻿import { AcApDocManager, AcApSettingManager } from '../../../app'
 import { AcApI18n } from '../../../i18n'
 import { AcEdPromptKeywordOptions } from '../prompt'
 import {
@@ -87,7 +87,7 @@ export class AcEdCommandLine {
 
   setPrompt(message?: string) {
     this.isPromptActive = true
-    const promptCore = message?.trim().replace(/[：:]\s*$/, '') ?? ''
+    const promptCore = message?.trim().replace(/[ï¼ڑ:]\s*$/, '') ?? ''
     this.promptEl.innerHTML = promptCore ? `${promptCore}: ` : ''
     this.textInput.placeholder = ''
     this.recordRecentMessage(promptCore ? `${promptCore}:` : message)
@@ -244,8 +244,10 @@ export class AcEdCommandLine {
         return
       }
     }
+    const commandName = cmdLine.trim().split(/\s+/)[0] ?? cmdLine.trim()
 
-    const command = this.resolveCommand(cmdLine)
+
+    const command = this.resolveCommand(commandName)
     if (!command) {
       const unknown = this.localize('main.commandLine.unknownCommand')
       this.showMessage(`${unknown}: ${cmdLine}`, 'warning')
@@ -822,7 +824,7 @@ export class AcEdCommandLine {
     this.textInput.placeholder = ''
 
     if (options.message) {
-      const promptCore = options.message.trim().replace(/[：:]\s*$/, '')
+      const promptCore = options.message.trim().replace(/[ï¼ڑ:]\s*$/, '')
       this.promptEl.append(promptCore + ' ')
     }
 
@@ -1059,3 +1061,7 @@ export class AcEdCommandLine {
     return this.container === document.body
   }
 }
+
+
+
+

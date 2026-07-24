@@ -51,13 +51,24 @@ import {
 import { MlCadViewer } from '@mlightcad/cad-viewer'
 import { AcApPdfImportConvertor } from '@mlightcad/cad-pdf-plugin'
 import { log } from '@mlightcad/data-model'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { AcApQuitCmd } from './commands'
+import { AcApQuitCmd, registerThreeEcadCommands } from './commands'
 import FileUpload from './components/FileUpload.vue'
 import { initializeLocale } from './locale'
 import { store } from './store'
 
+const zoomToFitAfterOpen = async () => {
+  await nextTick()
+
+  const delays = [100, 300, 800, 1500]
+
+  for (const delay of delays) {
+    window.setTimeout(() => {
+      AcApDocManager.instance.context?.view?.zoomToFitDrawing?.()
+    }, delay)
+  }
+}
 const initialize = () => {
   initializeLocale()
   if (import.meta.env.DEV) {
@@ -78,6 +89,7 @@ const initialize = () => {
     'exit',
     new AcApQuitCmd()
   )
+  registerThreeEcadCommands(register)
 }
 
 // Decide whether to show command line vertical toolbar at the right side,
@@ -91,6 +103,15 @@ const BASE_URL = 'https://cdn.jsdelivr.net/gh/mlightcad/cad-data@main/'
 
 const showViewer = computed(
   () => store.selectedFile != null || store.isNewDrawing
+)
+
+watch(
+  () => store.selectedFile,
+  file => {
+    if (file) {
+      void zoomToFitAfterOpen()
+    }
+  }
 )
 
 const selectedMode = ref<AcEdOpenMode>(AcEdOpenMode.Write)
@@ -189,6 +210,7 @@ const importPdfIntoCurrentDrawing = async (
   const convertor = new AcApPdfImportConvertor()
   await convertor.convert(context, buffer, pageNumber)
 
+  await zoomToFitAfterOpen()
   return true
 }
 
@@ -384,3 +406,9 @@ const handleNewDrawing = (
 }
 /* PDF_LAYOUT_TABS_HIDDEN_SCROLL_END */
 </style>
+
+
+
+
+
+
