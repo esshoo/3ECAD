@@ -9,6 +9,8 @@
       :right-offset="paletteOffsets.right"
       :top-offset="paletteOffsets.top"
       :bottom-offset="paletteOffsets.bottom"
+      :more-menu-label="t('main.toolPalette.dockSide')"
+      :dock-side-labels="dockSideLabels"
     >
       <ml-overflow-tabs
         v-model="store.dialogs.activePaletteTab"
@@ -119,6 +121,14 @@ interface Props {
 const props = defineProps<Props>()
 const { t } = useI18n()
 const containerRect = useViewerRect()
+
+const dockSideLabels = computed(() => ({
+  float: t('main.toolPalette.dock.float'),
+  left: t('main.toolPalette.dock.left'),
+  top: t('main.toolPalette.dock.top'),
+  bottom: t('main.toolPalette.dock.bottom'),
+  right: t('main.toolPalette.dock.right')
+}))
 
 const DEFAULT_WIDTH = 520
 const DEFAULT_HEIGHT = 500
