@@ -1,4 +1,4 @@
-﻿name: Check mlightcad/cad-viewer upstream updates
+name: Check mlightcad/cad-viewer upstream updates
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout 3ECAD
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
