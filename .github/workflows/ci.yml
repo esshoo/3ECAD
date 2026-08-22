@@ -83,7 +83,7 @@ jobs:
         run: pnpm pre-serve
 
       - name: Export self-contained HTML demo
-        if: github.ref == 'refs/heads/main'
+        if: github.repository == 'mlightcad/cad-viewer' && github.ref == 'refs/heads/main'
         run: node packages/examples/exportDemoHtml.js
         env:
           PLAYWRIGHT_BROWSER_CHANNEL: chrome
@@ -92,7 +92,7 @@ jobs:
       # download softprops/action-gh-release or upload-pages-artifact (GitHub
       # fetches every uses: action at job setup, even when step if: is false).
       - name: Upload pages source
-        if: github.ref == 'refs/heads/main'
+        if: github.repository == 'mlightcad/cad-viewer' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v6
         with:
           name: pages-source
@@ -157,7 +157,7 @@ jobs:
 
   upload-pages:
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.repository == 'mlightcad/cad-viewer' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Download pages source
@@ -173,7 +173,7 @@ jobs:
 
   deploy-pages:
     needs: upload-pages
-    if: github.ref == 'refs/heads/main'
+    if: github.repository == 'mlightcad/cad-viewer' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Setup Pages
