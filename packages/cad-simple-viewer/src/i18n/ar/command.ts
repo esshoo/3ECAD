@@ -706,6 +706,12 @@ export default {
         'بدء رسم جديد'
     },
 
+    close: {
+      ...enCommand.ACAD.close,
+      description:
+        'إغلاق الرسم الحالي'
+    },
+
     ray: {
       ...enCommand.ACAD.ray,
       description:
