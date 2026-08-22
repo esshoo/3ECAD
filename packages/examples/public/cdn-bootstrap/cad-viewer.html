@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta name="description" content="Minimal CDN bootstrap for @mlightcad/cad-viewer — no Node, no Vite.">
-<title>CAD Viewer — CDN Bootstrap</title>
+<meta name="description" content="تشغيل مباشر لـ @mlightcad/cad-viewer عبر CDN بدون Node أو Vite.">
+<title>عارض CAD — تشغيل مباشر عبر CDN</title>
 
 <!--
   Minimal zero-build host for @mlightcad/cad-viewer (jsDelivr only).
@@ -45,13 +45,13 @@
   .drop strong { color: #93c5fd; }
   .drop small { display: block; margin-top: 0.5rem; color: #737373; }
   #file { display: none; }
-  #app { position: fixed; inset: 0; }
+  #app { position: fixed; inset: 0; direction: ltr; }
   #app:empty { display: none; }
   #status {
     position: fixed; left: 12px; bottom: 12px; z-index: 20;
     max-width: min(520px, calc(100vw - 24px)); padding: 8px 10px; border-radius: 6px;
     background: #1a1a1a; color: #e5e5e5; font: 12px/1.4 ui-monospace, monospace;
-    white-space: pre-wrap; word-break: break-word; display: none;
+    white-space: pre-wrap; word-break: break-word; display: none; text-align: right;
   }
   #status.error { background: #450a0a; color: #fecaca; border: 1px solid #7f1d1d; }
   #status:not(:empty) { display: block; }
@@ -110,19 +110,19 @@
 </script>
 </head>
 <body>
-<section id="upload">
+<section id="upload" dir="rtl">
   <div class="card">
-    <h1>CAD Viewer (CDN)</h1>
-    <p>Open a local DWG or DXF file. No build step — peers load from jsDelivr.</p>
+    <h1>عارض CAD عبر CDN</h1>
+    <p>افتح ملف DWG أو DXF من جهازك مباشرة. لا تحتاج إلى عملية Build — يتم تحميل الاعتماديات من jsDelivr.</p>
     <label class="drop" id="drop">
       <input id="file" type="file" accept=".dwg,.dxf,application/acad,image/vnd.dxf">
-      Drop a file here or <strong>browse</strong>
+      أسقط الملف هنا أو <strong>استعرض الملفات</strong>
       <small>DWG · DXF</small>
     </label>
   </div>
 </section>
 <div id="app"></div>
-<pre id="status"></pre>
+<pre id="status" dir="rtl"></pre>
 
 <script type="module">
 const ML = '1.5.11'
@@ -223,7 +223,7 @@ function collectSpecs(source) {
 function rewriteCadViewer(source) {
   const specs = collectSpecs(source)
   const bad = [...specs].filter((s) => resolveSpec(s) === undefined)
-  if (bad.length) throw new Error(`Unresolved imports: ${bad.join(', ')}`)
+  if (bad.length) throw new Error(`تعذر حل الاستيرادات: ${bad.join(', ')}`)
 
   let out = source
   for (const spec of [...specs].filter((s) => resolveSpec(s) === CSS_SHIM)) {
@@ -243,7 +243,7 @@ function rewriteCadViewer(source) {
   }
 
   const exports = [...out.matchAll(/\bexport\s*\{([\s\S]*?)\}\s*;?/g)]
-  if (!exports.length) throw new Error('cad-viewer.js final export not found')
+  if (!exports.length) throw new Error('لم يتم العثور على التصدير النهائي لملف cad-viewer.js')
   const last = exports[exports.length - 1]
   const map = new Map()
   for (const part of last[1].split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -253,18 +253,18 @@ function rewriteCadViewer(source) {
   }
   const MlCadViewer = map.get('MlCadViewer')
   const i18n = map.get('i18n')
-  if (!MlCadViewer || !i18n) throw new Error('MlCadViewer/i18n missing from cad-viewer export')
+  if (!MlCadViewer || !i18n) throw new Error('لم يتم العثور على MlCadViewer أو i18n داخل حزمة cad-viewer')
   const bridge = `\n;globalThis.__MLIGHTCAD_INLINE_EXPORTS__={MlCadViewer:${MlCadViewer},i18n:${i18n}};\n`
   return out.slice(0, last.index) + bridge + out.slice(last.index + last[0].length)
 }
 
 async function loadInlineCadViewer() {
-  setStatus('Downloading cad-viewer.js…')
+  setStatus('جارٍ تنزيل cad-viewer.js…')
   const source = await fetch(CAD_VIEWER_URL, { cache: 'force-cache' }).then((r) => {
     if (!r.ok) throw new Error(`HTTP ${r.status} for cad-viewer.js`)
     return r.text()
   })
-  setStatus(`Rewriting cad-viewer.js (${(source.length / 1024 / 1024).toFixed(2)} MB)…`)
+  setStatus(`جارٍ تجهيز cad-viewer.js (${(source.length / 1024 / 1024).toFixed(2)} MB)…`)
   const rewritten = rewriteCadViewer(source)
   delete globalThis.__MLIGHTCAD_INLINE_EXPORTS__
   const script = document.createElement('script')
@@ -279,21 +279,21 @@ async function loadInlineCadViewer() {
     }, 25)
     script.onerror = (ev) => {
       clearInterval(timer)
-      reject(ev?.error || new Error('Failed to run rewritten cad-viewer.js'))
+      reject(ev?.error || new Error('فشل تشغيل نسخة cad-viewer.js بعد التجهيز'))
     }
     document.head.appendChild(script)
   })
 }
 
 const runtimeReady = (async () => {
-  setStatus('Loading CDN peers…')
+  setStatus('جارٍ تحميل اعتماديات CDN…')
   const [vue, elementPlus, simpleViewer, cadViewer] = await Promise.all([
     import('vue'),
     import('element-plus'),
     import('@mlightcad/cad-simple-viewer'),
     loadInlineCadViewer()
   ])
-  setStatus('CDN runtime ready. Choose a DWG/DXF file.')
+  setStatus('بيئة CDN جاهزة. اختر ملف DWG أو DXF.')
   return { vue, elementPlus, simpleViewer, cadViewer }
 })().catch((err) => {
   setStatus(err?.stack || String(err), true)
@@ -307,10 +307,10 @@ function isCadFile(file) {
 
 async function openFile(file) {
   if (!isCadFile(file)) {
-    setStatus('Please choose a .dwg or .dxf file.', true)
+    setStatus('يرجى اختيار ملف بصيغة .dwg أو .dxf.', true)
     return
   }
-  setStatus(`Opening ${file.name}…`)
+  setStatus(`جارٍ فتح ${file.name}…`)
   const { vue, elementPlus, simpleViewer, cadViewer } = await runtimeReady
   const { createApp, h } = vue
   const { AcApDocManager } = simpleViewer
