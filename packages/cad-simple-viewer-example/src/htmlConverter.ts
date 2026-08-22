@@ -35,15 +35,15 @@ const OPEN_OPTIONS: AcApOpenDatabaseOptions = {
 }
 
 const MESSAGES = {
-  invalidType: 'Please choose a .dwg or .dxf file.',
-  ready: 'Selected {name}. Adjust options, then convert.',
-  opening: 'Opening {name}…',
-  converting: 'Converting {name} to HTML…',
-  converted: 'Download started for {name}.html',
-  openFailed: 'Failed to open {name}.',
-  convertFailed: 'Conversion failed: {error}',
+  invalidType: 'يرجى اختيار ملف بصيغة .dwg أو .dxf.',
+  ready: 'تم اختيار {name}. عدّل الخيارات ثم ابدأ التحويل.',
+  opening: 'جارٍ فتح {name}…',
+  converting: 'جارٍ تحويل {name} إلى HTML…',
+  converted: 'بدأ تنزيل {name}.html',
+  openFailed: 'تعذر فتح {name}.',
+  convertFailed: 'فشل التحويل: {error}',
   runtimeMissing:
-    'Failed to load viewer-runtime.iife.js. Rebuild the example package and refresh.'
+    'تعذر تحميل viewer-runtime.iife.js. أعد بناء حزمة المثال ثم حدّث الصفحة.'
 } as const
 
 function format(template: string, vars: Record<string, string>): string {
@@ -331,7 +331,7 @@ class HtmlConverterApp {
       typeof view.ensureEntitiesConvertedForExport !== 'function'
     ) {
       throw new Error(
-        'CAD scene is not available. Open a drawing before exporting to HTML.'
+        'مشهد CAD غير متاح. افتح رسمًا قبل التصدير إلى HTML.'
       )
     }
 

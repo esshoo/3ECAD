@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Convert a local DWG or DXF drawing to a self-contained offline HTML file in the browser. No backend — the drawing never leaves this page."
+      content="حوّل رسم DWG أو DXF محليًا إلى ملف HTML مستقل يعمل دون اتصال. لا يوجد خادم خلفي — الرسم لا يغادر جهازك."
     />
-    <title>Convert drawing to offline HTML</title>
+    <title>تحويل الرسم إلى HTML للعمل دون اتصال</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -477,8 +477,8 @@
   <body>
     <div class="page">
       <nav class="nav">
-        <a href="../" id="examplesHomeLink">Examples home</a>
-        <a href="./">Simple viewer demo</a>
+        <a href="../" id="examplesHomeLink">الصفحة الرئيسية للأمثلة</a>
+        <a href="./">عارض CAD البسيط</a>
       </nav>
       <script>
         // Hide when served at site root (Vite); `../` only reaches the examples
@@ -493,11 +493,11 @@
         })()
       </script>
       <header>
-        <h1>Convert drawing to offline HTML</h1>
+        <h1>تحويل الرسم إلى ملف HTML يعمل دون اتصال</h1>
         <p class="lead">
-          Choose a local DWG or DXF file, pick export options, then convert.
-          The drawing is read only when you click Convert — nothing is uploaded
-          to a server.
+          اختر ملف DWG أو DXF من جهازك، وحدد خيارات التصدير، ثم ابدأ التحويل.
+          لن تتم قراءة الرسم إلا عند بدء التحويل — ولن يتم رفع أي شيء
+          إلى أي خادم.
         </p>
       </header>
 
@@ -514,32 +514,32 @@
         >
           <div class="spinner" aria-hidden="true"></div>
           <div class="progress-track" aria-hidden="true"><span></span></div>
-          <p class="progress-message" id="progressMessage">Working…</p>
+          <p class="progress-message" id="progressMessage">جارٍ العمل…</p>
         </div>
         <div class="card-ui">
         <div class="file-bar">
         <label class="drop" id="dropZone" for="fileInput">
-          Drop a DWG or DXF here, or <strong>browse</strong>
-          <small>The file is not read until you convert</small>
-          <span class="file-name" id="fileName">No file selected</span>
+          أسقط ملف DWG أو DXF هنا، أو <strong>استعرض الملفات</strong>
+          <small>لن تتم قراءة الملف حتى تبدأ عملية التحويل</small>
+          <span class="file-name" id="fileName">لم يتم اختيار ملف</span>
         </label>
         <input id="fileInput" type="file" accept=".dwg,.dxf,application/acad,image/vnd.dxf" />
-        <button type="button" class="btn" id="sampleButton">Use sample</button>
+        <button type="button" class="btn" id="sampleButton">استخدام ملف تجريبي</button>
         </div>
 
         <div class="options">
-          <h2>Export options</h2>
+          <h2>خيارات التصدير</h2>
           <p class="options-intro">
-            These match the HTML export dialog in the full viewer.
+            هذه الخيارات مطابقة لإعدادات تصدير HTML في العارض الكامل.
           </p>
 
           <div class="options-grid">
           <fieldset>
-            <legend>Layers</legend>
+            <legend>الطبقات</legend>
             <div class="toggle-row">
               <div class="toggle-copy">
-                <span class="toggle-label">Export invisible layers</span>
-                <span class="hint">Include geometry on off or frozen layers</span>
+                <span class="toggle-label">تصدير الطبقات غير المرئية</span>
+                <span class="hint">تضمين العناصر الموجودة على الطبقات المغلقة أو المجمّدة</span>
               </div>
               <label class="switch">
                 <input id="exportInvisibleLayers" type="checkbox" checked />
@@ -549,11 +549,11 @@
           </fieldset>
 
           <fieldset>
-            <legend>Layouts</legend>
+            <legend>المخططات</legend>
             <div class="toggle-row">
               <div class="toggle-copy">
-                <span class="toggle-label">Export layouts</span>
-                <span class="hint">Include paper-space layouts in the snapshot</span>
+                <span class="toggle-label">تصدير المخططات</span>
+                <span class="hint">تضمين مخططات مساحة الورق في الملف الناتج</span>
               </div>
               <label class="switch">
                 <input id="exportLayouts" type="checkbox" checked />
@@ -563,40 +563,40 @@
           </fieldset>
 
           <fieldset>
-            <legend>Initial view</legend>
+            <legend>العرض الابتدائي</legend>
             <div class="choice-grid">
               <label class="choice is-selected">
                 <input type="radio" name="initialView" value="fit" checked />
                 <span>
-                  <span class="choice-title">Zoom to extents</span>
-                  <span class="hint">Fit the whole drawing when the HTML opens</span>
+                  <span class="choice-title">ملاءمة الرسم بالكامل</span>
+                  <span class="hint">عرض الرسم بالكامل عند فتح ملف HTML</span>
                 </span>
               </label>
               <label class="choice">
                 <input type="radio" name="initialView" value="current" />
                 <span>
-                  <span class="choice-title">Saved viewport</span>
-                  <span class="hint">Use the view last saved in the drawing</span>
+                  <span class="choice-title">منظور العرض المحفوظ</span>
+                  <span class="hint">استخدام آخر منظور عرض محفوظ داخل الرسم</span>
                 </span>
               </label>
             </div>
           </fieldset>
 
           <fieldset>
-            <legend>Viewer mode</legend>
+            <legend>وضع العارض</legend>
             <div class="choice-grid">
               <label class="choice">
                 <input type="radio" name="viewerMode" value="view" />
                 <span>
-                  <span class="choice-title">View</span>
-                  <span class="hint">Pan, zoom, and layer controls only</span>
+                  <span class="choice-title">عرض</span>
+                  <span class="hint">التحريك والتكبير والتحكم في الطبقات فقط</span>
                 </span>
               </label>
               <label class="choice is-selected">
                 <input type="radio" name="viewerMode" value="measure" checked />
                 <span>
-                  <span class="choice-title">Measure &amp; Review</span>
-                  <span class="hint">Adds measurement and markup tools</span>
+                  <span class="choice-title">القياس والمراجعة</span>
+                  <span class="hint">إضافة أدوات القياس وعلامات المراجعة</span>
                 </span>
               </label>
             </div>
@@ -605,12 +605,12 @@
         </div>
 
         <button type="button" class="btn btn-primary" id="convertButton" disabled>
-          Convert and download HTML
+          تحويل وتنزيل ملف HTML
         </button>
-        <p class="status" id="status">Choose a drawing, then convert.</p>
+        <p class="status" id="status">اختر رسمًا ثم ابدأ التحويل.</p>
         <p class="privacy">
-          Parsing, rendering, and packaging all happen locally. Only public
-          font/template assets may be fetched from the cad-data CDN.
+          تتم قراءة الرسم ومعالجته وتجهيز الملف بالكامل على جهازك. قد يتم فقط
+          تحميل ملفات الخطوط والقوالب العامة من شبكة cad-data CDN.
         </p>
         </div>
       </div>
