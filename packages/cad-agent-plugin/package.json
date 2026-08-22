@@ -38,7 +38,7 @@
       "import": "./dist/cad-agent-plugin-register.js",
       "require": "./dist/cad-agent-plugin-register.umd.cjs"
     },
-    "./style.css": "./dist/style.css"
+    "./style.css": "./dist/cad-agent-plugin.css"
   },
   "scripts": {
     "clean": "rimraf dist lib tsconfig.tsbuildinfo",
