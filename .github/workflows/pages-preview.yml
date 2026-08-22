@@ -37,16 +37,32 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build CAD Viewer
-        run: pnpm exec nx run @mlightcad/cad-viewer-example:build
+      - name: Build projects
+        run: |
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          pnpm build
+
+      - name: Build docs
+        run: pnpm docs:build
+
+      - name: Prepare examples site
+        run: pnpm pre-serve
+
+      - name: Install Playwright system dependencies
+        run: pnpm --filter @mlightcad/cad-viewer-example exec playwright install-deps chromium
+
+      - name: Export self-contained HTML demo
+        run: node packages/examples/exportDemoHtml.js
+        env:
+          PLAYWRIGHT_BROWSER_CHANNEL: chrome
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Pages artifact
+      - name: Upload complete examples site
         uses: actions/upload-pages-artifact@v4
         with:
-          path: packages/cad-viewer-example/dist
+          path: packages/examples/public
 
   deploy:
     environment:
