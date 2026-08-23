@@ -1,15 +1,15 @@
 ﻿import {
+  getThreeEcadTextSettings,
+  resetThreeEcadTextSettings,
+  saveThreeEcadTextSettings
+} from '@mlightcad/cad-pdf-plugin'
+import {
   AcApDocManager,
   AcApI18n,
   AcEdCommand,
   AcEdPromptStatus,
   AcEdPromptStringOptions
 } from '@mlightcad/cad-simple-viewer'
-import {
-  getThreeEcadTextSettings,
-  resetThreeEcadTextSettings,
-  saveThreeEcadTextSettings
-} from '@mlightcad/cad-pdf-plugin'
 
 const t = (key: string, fallback: string) => {
   const value = AcApI18n.t(key)

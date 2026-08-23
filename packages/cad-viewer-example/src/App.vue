@@ -41,16 +41,15 @@
 
 <script setup lang="ts">
 // import { AcApSettingManager } from '@mlightcad/cad-simple-viewer'
+import { AcApPdfImportConvertor } from '@mlightcad/cad-pdf-plugin'
 import {
+  type AcApContext,
   AcApDocManager,
   AcApOpenViewMode,
-  AcEdCommandStack,
-  AcEdOpenMode,
   acapUpdateOpenFileDialogOptions,
-  type AcApContext
-} from '@mlightcad/cad-simple-viewer'
+  AcEdCommandStack,
+  AcEdOpenMode} from '@mlightcad/cad-simple-viewer'
 import { MlCadViewer } from '@mlightcad/cad-viewer'
-import { AcApPdfImportConvertor } from '@mlightcad/cad-pdf-plugin'
 import { log } from '@mlightcad/data-model'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

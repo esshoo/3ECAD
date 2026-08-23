@@ -1,4 +1,5 @@
-﻿import type { AcApContext } from '@mlightcad/cad-simple-viewer'
+/* eslint-disable @typescript-eslint/no-explicit-any -- Temporary compatibility for dynamic PDF.js operator payloads; replace with typed adapters during PDF plugin refactor. */
+import type { AcApContext } from '@mlightcad/cad-simple-viewer'
 import {
   AcCmColor,
   AcCmColorMethod,
@@ -10,13 +11,14 @@ import {
   AcGePoint3d,
   log
 } from '@mlightcad/data-model'
-import { getThreeEcadTextSettings } from './threeEcadTextSettings'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import type {
   PDFOperatorList,
   PDFPageProxy
 } from 'pdfjs-dist/types/src/display/api'
+
+import { getThreeEcadTextSettings } from './threeEcadTextSettings'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -1253,6 +1255,7 @@ export class AcApPdfImportConvertor {
     }
 
     const importPdfText = (rawTextValue: unknown) => {
+      // eslint-disable-next-line no-control-regex -- PDF text sanitization intentionally removes null characters.
       const textString = glyphsToUnicodeText(rawTextValue).replace(/\u0000/g, '')
 
       if (textString.trim().length === 0) return
