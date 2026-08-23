@@ -61,23 +61,18 @@ import {
   layerThawed,
   layerUnlocked
 } from '../../svg'
-
-import { MlColorPickerDlg } from '../dialog'
-
+import {
+  buildLineTypeOptions,
+  type LineTypeOption,
+  resolveLineTypeBackground,
+  resolveLineTypePreviewSvg} from '../common/lineTypeOptions'
 import type {
   MlLayerTableChangeField,
   MlLayerTableRow
 } from '../common/MlLayerTable'
-
-import {
-  buildLineTypeOptions,
-  resolveLineTypeBackground,
-  resolveLineTypePreviewSvg,
-  type LineTypeOption
-} from '../common/lineTypeOptions'
-
 import MlLineTypeSelect from '../common/MlLineTypeSelect.vue'
 import MlLineWeightSelect from '../common/MlLineWeightSelect.vue'
+import { MlColorPickerDlg } from '../dialog'
 
 const props = withDefaults(
   defineProps<{
@@ -124,7 +119,9 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 
-const tableRef = ref<any>()
+const tableRef = ref<{
+  scrollToRow?: (row: number) => void
+}>()
 const draftInputRef = ref<InputInstance>()
 
 const colorDialogVisible = ref(false)
