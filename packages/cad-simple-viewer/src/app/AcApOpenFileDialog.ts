@@ -5,7 +5,7 @@ import { AcEdOpenMode } from '../editor/view/AcEdOpenMode'
 import type { AcApOpenDatabaseOptions } from './AcDbOpenDatabaseOptions'
 
 /** File extensions accepted by the built-in OPEN file dialog. */
-const SUPPORTED_EXTENSIONS = ['.dxf', '.dwg'] as const
+const SUPPORTED_EXTENSIONS = ['.dxf', '.dwg', '.pdf'] as const
 
 /**
  * Resolver for default options used by the built-in OPEN file dialog.
@@ -27,6 +27,18 @@ export interface AcApOpenFileDialogOptions {
   getOpenDocumentDefaults?: () =>
     | AcApOpenDatabaseOptions
     | Promise<AcApOpenDatabaseOptions>
+
+  /**
+   * Optional application-level handler for supported files that need a
+   * specialized import path instead of AcApDocManager.openDocument().
+   *
+   * Return true when the file was handled and the default CAD open path
+   * should be skipped.
+   */
+  onFileSelected?: (
+    file: File,
+    options: AcApOpenDatabaseOptions
+  ) => boolean | Promise<boolean>
 }
 
 /** Hidden `<input type="file">` element reused across OPEN requests. */
@@ -37,12 +49,12 @@ let installed = false
 let currentOptions: AcApOpenFileDialogOptions = {}
 
 /**
- * Returns whether the given file name has a supported CAD extension.
+ * Returns whether the given file name has a supported OPEN extension.
  *
  * @param fileName - Local file name including extension.
  * @returns `true` when the name ends with `.dxf` or `.dwg` (case-insensitive).
  */
-const isSupportedCadFile = (fileName: string) => {
+const isSupportedOpenFile = (fileName: string) => {
   const lowerName = fileName.toLowerCase()
   return SUPPORTED_EXTENSIONS.some(ext => lowerName.endsWith(ext))
 }
@@ -111,7 +123,7 @@ const onFileChange = async (event: Event) => {
   target.value = ''
   if (!file) return
 
-  if (!isSupportedCadFile(file.name)) {
+  if (!isSupportedOpenFile(file.name)) {
     log.warn(`Unsupported file type: ${file.name}`)
     return
   }
@@ -123,6 +135,14 @@ const onFileChange = async (event: Event) => {
     const options = await resolveOpenDocumentDefaults(
       currentOptions.getOpenDocumentDefaults
     )
+
+    if (currentOptions.onFileSelected) {
+      const handled = await currentOptions.onFileSelected(file, options)
+      if (handled) {
+        return
+      }
+    }
+
     eventBus.emit('open-local-file-started', {
       mode: options.mode ?? AcEdOpenMode.Read
     })
@@ -137,7 +157,7 @@ const onFileChange = async (event: Event) => {
 /**
  * Installs the built-in file picker used by the OPEN command.
  *
- * Listens for `open-file` events, prompts for a local `.dxf` / `.dwg` file,
+ * Listens for `open-file` events, prompts for a local `.dxf`, `.dwg`, or `.pdf` file,
  * and opens it through {@link AcApDocManager.openDocument}.
  *
  * @param options - Dialog configuration. When `enabled` is `false`, installation is skipped.
@@ -162,7 +182,10 @@ export function acapInstallOpenFileDialog(
 export function acapUpdateOpenFileDialogOptions(
   options: AcApOpenFileDialogOptions
 ) {
-  currentOptions = options
+  currentOptions = {
+    ...currentOptions,
+    ...options
+  }
 }
 
 /** Removes the built-in OPEN file dialog and its hidden input element. */

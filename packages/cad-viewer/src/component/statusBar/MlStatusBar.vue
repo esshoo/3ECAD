@@ -6,10 +6,14 @@
   >
     <!-- Left Slot Content -->
     <template #left>
-      <ml-layout-tabs
-        :disabled="isStatusBarDisabled"
-        :reserved-width="layoutTabsReservedWidth"
-      />
+      <div class="ml-status-bar-left-content">
+        <ml-layout-tabs
+          class="ml-status-bar-layout-tabs"
+          :disabled="isStatusBarDisabled"
+          :reserved-width="layoutTabsReservedWidth"
+        />
+        <div class="ml-pdf-page-tabs-host" />
+      </div>
     </template>
 
     <!-- Right Slot Content -->
@@ -125,6 +129,35 @@ const toggleNotificationCenter = () => {
   opacity: 0.6;
   pointer-events: none;
   user-select: none;
+}
+
+.ml-status-bar-left-content {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  height: var(--ml-status-bar-height);
+}
+
+.ml-status-bar-layout-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ml-pdf-page-tabs-host {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  height: var(--ml-status-bar-height);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.ml-pdf-page-tabs-host::-webkit-scrollbar {
+  display: none;
 }
 
 .ml-status-bar :deep(.ml-status-bar-left) {

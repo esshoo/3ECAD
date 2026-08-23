@@ -35,9 +35,10 @@
             class="upload-dropzone"
             drag
             :auto-upload="false"
-            accept=".dwg,.dxf"
+            accept=".dwg,.dxf,.pdf,application/pdf"
             :on-change="handleFileChange"
             :before-upload="beforeUpload"
+            :show-file-list="false"
           >
             <div class="dropzone-content">
               <p class="dropzone-title">
@@ -49,6 +50,7 @@
               <div class="format-tags">
                 <span class="format-tag">DWG</span>
                 <span class="format-tag">DXF</span>
+                <span class="format-tag">PDF</span>
               </div>
             </div>
           </el-upload>
@@ -331,7 +333,7 @@ const beforeUpload: UploadProps['beforeUpload'] = (rawFile: File) => {
 }
 
 const isValidFile = (file: File): boolean => {
-  const validExtensions = ['.dwg', '.dxf']
+  const validExtensions = ['.dwg', '.dxf', '.pdf']
   const fileName = file.name.toLowerCase()
   return validExtensions.some(ext => fileName.endsWith(ext))
 }
@@ -653,3 +655,4 @@ const isValidFile = (file: File): boolean => {
   }
 }
 </style>
+

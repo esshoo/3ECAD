@@ -13,7 +13,7 @@ export default {
   example: {
     fileUpload: {
       title: 'Select CAD File to View',
-      subtitle: 'Import DWG or DXF drawings into the viewer',
+      subtitle: 'Import DWG, DXF, or PDF drawings into the viewer',
       newDrawing: 'New Drawing',
       or: 'or',
       dropFile: 'Drop file or',
@@ -58,7 +58,10 @@ export default {
       showHint: 'AutoCAD editor semantics',
 
       invalidFileType:
-        'Invalid file type. Please upload DWG or DXF files.'
+        'Invalid file type. Please upload DWG, DXF, or PDF files.'
+    },
+    pdf: {
+      page: 'Page {page}'
     }
   }
 }
