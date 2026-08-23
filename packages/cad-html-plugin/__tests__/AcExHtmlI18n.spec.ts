@@ -85,7 +85,7 @@ describe('AcExHtmlI18n', () => {
     expect(formatAcExHtmlMessage('Zoom: {name}', { name: '0' })).toBe('Zoom: 0')
   })
 
-  it('cycles the locale through en -> zh -> cs -> tr -> en', () => {
+  it('cycles the locale through en -> zh -> cs -> tr -> ar -> en', () => {
     const i18n = new AcExHtmlI18n('en')
     expect(i18n.t('layers.title')).toBe('Layers')
     expect(i18n.localeBadge).toBe('EN')
@@ -101,6 +101,10 @@ describe('AcExHtmlI18n', () => {
     expect(i18n.toggleLocale()).toBe('tr')
     expect(i18n.t('layers.title')).toBe('Katmanlar')
     expect(i18n.localeBadge).toBe('TR')
+
+    expect(i18n.toggleLocale()).toBe('ar')
+    expect(i18n.t('layers.title')).toBe('الطبقات')
+    expect(i18n.localeBadge).toBe('AR')
 
     expect(i18n.toggleLocale()).toBe('en')
     expect(i18n.locale).toBe('en')
