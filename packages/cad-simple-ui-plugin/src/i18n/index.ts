@@ -1,11 +1,11 @@
 import { AcApI18n } from '@mlightcad/cad-simple-viewer'
 
+import { ar } from './ar'
 import { commandAr } from './command-ar'
 import { commandCs } from './command-cs'
 import { commandEn } from './command-en'
 import { commandTr } from './command-tr'
 import { commandZh } from './command-zh'
-import { ar } from './ar'
 import { cs } from './cs'
 import { en } from './en'
 import { tr } from './tr'
