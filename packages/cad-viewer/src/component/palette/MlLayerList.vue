@@ -176,7 +176,6 @@ import type {
   MlLayerTableChangeField,
   MlLayerTableRow
 } from '../common/MlLayerTable'
-import MlLayerTable from '../common/MlLayerTable.vue'
 import MlLayerTableVirtual from './MlLayerTableVirtual.vue'
 
 const { t } = useI18n()

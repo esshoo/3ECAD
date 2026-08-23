@@ -731,10 +731,10 @@ const columns =
                 event.stopPropagation(),
 
               onKeydown: (
-                event: KeyboardEvent
+                event: Event
               ) => {
                 if (
-                  event.key ===
+                  (event as KeyboardEvent).key ===
                   'Enter'
                 ) {
                   event.preventDefault()
@@ -745,7 +745,7 @@ const columns =
                 }
 
                 if (
-                  event.key ===
+                  (event as KeyboardEvent).key ===
                   'Escape'
                 ) {
                   event.preventDefault()
@@ -1174,10 +1174,10 @@ const columns =
                 event.stopPropagation(),
 
               onKeydown: (
-                event: KeyboardEvent
+                event: Event
               ) => {
                 if (
-                  event.key ===
+                  (event as KeyboardEvent).key ===
                   'Escape'
                 ) {
                   stopEditing()
@@ -1186,7 +1186,7 @@ const columns =
                 }
 
                 if (
-                  event.key ===
+                  (event as KeyboardEvent).key ===
                   'Enter'
                 ) {
                   ;(
@@ -1271,10 +1271,10 @@ const columns =
                 event.stopPropagation(),
 
               onKeydown: (
-                event: KeyboardEvent
+                event: Event
               ) => {
                 if (
-                  event.key ===
+                  (event as KeyboardEvent).key ===
                   'Escape'
                 ) {
                   stopEditing()
@@ -1283,7 +1283,7 @@ const columns =
                 }
 
                 if (
-                  event.key ===
+                  (event as KeyboardEvent).key ===
                   'Enter'
                 ) {
                   ;(
