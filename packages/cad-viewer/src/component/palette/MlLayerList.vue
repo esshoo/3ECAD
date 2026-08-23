@@ -124,7 +124,7 @@
       </div>
 
       <div class="ml-layer-manager-list">
-        <MlLayerTable
+        <MlLayerTableVirtual
           ref="layerTableRef"
           :layers="displayedLayers"
           :current-layer-name="currentLayerName"
@@ -177,6 +177,7 @@ import type {
   MlLayerTableRow
 } from '../common/MlLayerTable'
 import MlLayerTable from '../common/MlLayerTable.vue'
+import MlLayerTableVirtual from './MlLayerTableVirtual.vue'
 
 const { t } = useI18n()
 
@@ -229,7 +230,7 @@ const filterPanelVisible = ref(false)
 /** Selected layer name (stable across table row identity refreshes). */
 const selectedLayerName = ref<string | null>(null)
 const filterTreeRef = ref<InstanceType<typeof ElTree>>()
-const layerTableRef = ref<InstanceType<typeof MlLayerTable>>()
+const layerTableRef = ref<InstanceType<typeof MlLayerTableVirtual>>()
 /** When true, an inline new-layer row is shown below the current layer. */
 const isDraftingNewLayer = ref(false)
 const draftLayerName = ref('')

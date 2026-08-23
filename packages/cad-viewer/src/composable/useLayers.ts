@@ -152,6 +152,9 @@ export function useLayers(editor: AcApDocManager) {
   const currentLayerNameState = ref('')
   let subscribedLayerStore: AcApLayerStore | undefined
 
+  const layerPerfInstance = Math.random().toString(36).slice(2, 8)
+  console.log(`[LayerPerf] useLayers create ${layerPerfInstance}`)
+
   /** Returns the database of the currently active document, if any. */
   const getCurrentDatabase = () => editor.curDocument?.database
 
@@ -453,6 +456,7 @@ export function useLayers(editor: AcApDocManager) {
   bindToActiveDocument()
 
   onScopeDispose(() => {
+    console.log(`[LayerPerf] useLayers dispose ${layerPerfInstance}`)
     editor.events.documentActivated.removeEventListener(handleDocumentActivated)
     if (subscribedLayerStore) {
       subscribedLayerStore.events.changed.removeEventListener(
