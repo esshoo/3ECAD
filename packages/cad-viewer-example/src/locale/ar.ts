@@ -13,7 +13,7 @@ export default {
   example: {
     fileUpload: {
       title: 'اختر ملف CAD لعرضه',
-      subtitle: 'استورد رسومات DWG أو DXF إلى العارض',
+      subtitle: 'استورد رسومات DWG أو DXF أو PDF إلى العارض',
       newDrawing: 'رسم جديد',
       or: 'أو',
       dropFile: 'أسقط الملف هنا أو',
@@ -58,7 +58,10 @@ export default {
       showHint: 'سلوك محرر AutoCAD',
 
       invalidFileType:
-        'نوع الملف غير صالح. يرجى اختيار ملف DWG أو DXF.'
+        'نوع الملف غير صالح. يرجى اختيار ملف DWG أو DXF أو PDF.'
+    },
+    pdf: {
+      page: 'الصفحة {page}'
     }
   }
 }
