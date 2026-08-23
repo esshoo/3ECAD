@@ -73,6 +73,11 @@ import type {
 import MlLineTypeSelect from '../common/MlLineTypeSelect.vue'
 import MlLineWeightSelect from '../common/MlLineWeightSelect.vue'
 import { MlColorPickerDlg } from '../dialog'
+import {
+  formatLineWeightLabel,
+  lineWeightPreviewPx,
+  localizeLineTypeLabel
+} from './layerTableVirtualFormatters'
 
 const props = withDefaults(
   defineProps<{
@@ -172,33 +177,14 @@ const activeDatabase = shallowRef(
   AcApDocManager.instance?.curDocument?.database
 )
 
-const localizeLineTypeLabel = (
-  value: string,
-  label: string
-) => {
-  if (locale.value !== 'ar') return label
-
-  switch (value.trim().toLowerCase()) {
-    case 'bylayer':
-      return 'حسب الطبقة'
-
-    case 'byblock':
-      return 'حسب الكتلة'
-
-    case 'continuous':
-      return 'متصل'
-
-    default:
-      return label
-  }
-}
 
 const lineTypeOptions = computed<LineTypeOption[]>(() =>
   buildLineTypeOptions(activeDatabase.value).map(item => ({
     ...item,
     label: localizeLineTypeLabel(
       item.value,
-      item.label
+      item.label,
+      locale.value
     ),
     previewSvgString:
       resolveLineTypePreviewSvg(item)
@@ -368,40 +354,7 @@ const formatLayerColorName = (
   return colorName(name)
 }
 
-const formatLineWeightLabel = (
-  value: number
-) => {
-  switch (value) {
-    case AcGiLineWeight.ByLayer:
-      return locale.value === 'ar'
-        ? 'حسب الطبقة'
-        : 'ByLayer'
 
-    case AcGiLineWeight.ByBlock:
-      return locale.value === 'ar'
-        ? 'حسب الكتلة'
-        : 'ByBlock'
-
-    case AcGiLineWeight.ByLineWeightDefault:
-      return locale.value === 'ar'
-        ? 'افتراضي'
-        : 'Default'
-
-    default:
-      return `${(value / 100).toFixed(2)} mm`
-  }
-}
-
-const lineWeightPreviewPx = (
-  value: number
-): number | null => {
-  if (value < 0) return null
-
-  return Math.max(
-    1,
-    Math.min(6, value / 40)
-  )
-}
 
 /* ---------------------------------------------------------
  * Color
@@ -527,7 +480,8 @@ const renderLineTypeDisplay = (
     option?.label ??
     localizeLineTypeLabel(
       row.linetype,
-      row.linetype
+      row.linetype,
+      locale.value
     )
 
   return h(
@@ -635,7 +589,8 @@ const renderLineWeightDisplay = (
             'ml-layer-lineweight-label'
         },
         formatLineWeightLabel(
-          row.lineWeight
+          row.lineWeight,
+          locale.value
         )
       )
     ]
