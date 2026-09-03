@@ -14,6 +14,16 @@ export default {
     invalidInput: 'Geçersiz giriş.',
     close: 'Komut satırını kapat'
   },
+  mobileCommand: {
+    length: 'Uzunluk',
+    angle: 'Açı',
+    dx: 'ΔX',
+    dy: 'ΔY',
+    x: 'X',
+    y: 'Y',
+    confirm: 'Onayla',
+    cancel: 'İptal'
+  },
   inputManager: {
     firstCorner: 'İlk köşeyi belirtin veya',
     secondCorner: 'İkinci köşeyi belirtin veya'
@@ -56,7 +66,24 @@ export default {
   },
   drawStyle: {
     color: 'Renk',
-    lineWeight: 'Çizgi kalınlığı',
     fontSize: 'Yazı yüksekliği'
+  },
+  colorPicker: {
+    title: 'Renk Seç',
+    close: 'Kapat',
+    ok: 'Tamam',
+    cancel: 'İptal',
+    index: 'Renk İndeksi: ',
+    rgb: 'RGB: ',
+    input: 'Renk',
+    inputPlaceholder: '1-255 veya #RRGGBB'
+  },
+  touchPointTutorial: {
+    title: 'Noktalar nasıl hassas seçilir?',
+    description:
+      'Ekranda yaklaşık 1 saniye basılı tutun. Parmağınızın üstünde bir artı belirir ve hareket ederken geometriye yapışarak daha doğru seçim yapmanızı sağlar.',
+    snoozeToday: 'Bugün tekrar hatırlatma',
+    hideForever: 'Bir daha hatırlatma',
+    ok: 'Anladım'
   }
 }

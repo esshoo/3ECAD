@@ -1,8 +1,4 @@
-import {
-  AcCmColor,
-  AcGePoint3d,
-  AcGePoint3dLike
-} from '@mlightcad/data-model'
+import { AcCmColor, AcGePoint3d, AcGePoint3dLike } from '@mlightcad/data-model'
 import {
   AcTrHtmlCallout,
   AcTrHtmlDot,
@@ -12,30 +8,30 @@ import {
 import { AcApContext } from '../../app'
 import {
   AcEdBaseView,
-  AcEdCommand,
   AcEdPreviewJig,
   AcEdPromptPointOptions,
   AcEdPromptStatus
 } from '../../editor'
 import { AcApI18n } from '../../i18n'
-import type { AcTrView2d } from '../../view'
+import { type AcTrView2d, pickAttachableShapeMarkupAt } from '../../view'
 import {
   AcApHtmlLivePreview,
   acapStrokeLiveSegment
 } from '../overlay/AcApHtmlLivePreview'
+import { createMarkupMeta, promptMarkupCapsuleText } from './AcApMarkupCmdUtil'
+import { AcApMarkupDrawCmd } from './AcApMarkupDrawCmd'
 import {
-  configureMarkupCommand,
-  createMarkupMeta,
-  promptMarkupCapsuleText,
-  withMarkupInput
-} from './AcApMarkupCmdUtil'
-import { commitMarkup } from './AcApMarkupPresenter'
+  isAttachableShapeMarkup,
+  markupShapeOutlineFromGeometry
+} from './AcApMarkupGeometry'
+import { attachCalloutToMarkup, commitMarkup } from './AcApMarkupPresenter'
+import { promptAttachedCallout } from './AcApMarkupShapeCallout'
 import { MARKUP_LIVE_LAYER } from './AcApMarkupStore'
 import type { AcApMarkupRecord } from './AcApMarkupTypes'
 import {
   defaultMarkupColor,
   getMarkupFontSize,
-  getMarkupLineWeight,
+  MARKUP_LINE_WEIGHT,
   markupCanvasLineWidth,
   subscribeMarkupDrawStyle
 } from './AcApMarkupUtil'
@@ -156,7 +152,7 @@ class AcApMarkupCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
   }
 
   private paintLeader(): void {
-    const lineWidth = markupCanvasLineWidth(getMarkupLineWeight())
+    const lineWidth = markupCanvasLineWidth(MARKUP_LINE_WEIGHT)
     const color = this._color
     const tip = this._tip
     const anchor = this._anchor
@@ -179,14 +175,9 @@ class AcApMarkupCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
  *
  * @see Autodesk Design Review help — Create a Callout for 2D Content
  */
-export class AcApMarkupCalloutCmd extends AcEdCommand {
-  constructor() {
-    super()
-    configureMarkupCommand(this)
-  }
-
+export class AcApMarkupCalloutCmd extends AcApMarkupDrawCmd {
   async execute(context: AcApContext) {
-    await withMarkupInput(context, async () => {
+    await this.withMarkupInput(context, async () => {
       const color = defaultMarkupColor()
 
       // 1. Arrow / leader tip (where the leader begins on the drawing)
@@ -196,6 +187,24 @@ export class AcApMarkupCalloutCmd extends AcEdCommand {
       const tipResult = await context.view.editor.getPoint(tipPrompt)
       if (tipResult.status !== AcEdPromptStatus.OK) return
       const tip = tipResult.value!
+      const view2d = context.view as AcTrView2d
+
+      // Clicking the outer frame of a cloud / rect / circle that has no
+      // leader yet attaches a callout to that shape instead of creating a
+      // standalone callout markup.
+      const host = pickAttachableShapeMarkupAt(view2d, { x: tip.x, y: tip.y })
+      if (host && isAttachableShapeMarkup(host.geometry)) {
+        const outline = markupShapeOutlineFromGeometry(host.geometry)
+        const callout = await promptAttachedCallout(context, outline, {
+          force: true,
+          previewShape: false,
+          toward: { x: tip.x, y: tip.y }
+        })
+        if (callout) {
+          attachCalloutToMarkup(context.view, host.id, callout)
+        }
+        return
+      }
 
       // 2. Text-box location with live jig preview (placeholder bubble)
       const jig = new AcApMarkupCalloutJig(context.view, tip, '', color)

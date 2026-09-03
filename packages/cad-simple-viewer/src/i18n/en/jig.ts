@@ -675,6 +675,10 @@ export default {
     firstPoint: 'Specify first point',
     secondPoint: 'Specify second point'
   },
+  measureContinuous: {
+    firstPoint: 'Specify first point',
+    nextPoint: 'Specify next point (or press Enter to finish)'
+  },
   measurePoint: {
     point: 'Specify point'
   },
@@ -731,7 +735,7 @@ export default {
       secondCorner: 'Specify opposite corner of highlight'
     },
     callout: {
-      tip: 'Specify leader tip (arrow end)',
+      tip: 'Specify leader tip, or a cloud / rectangle / circle outline without a callout',
       anchor: 'Specify callout text location',
       content: 'Enter callout text'
     },
@@ -1193,6 +1197,11 @@ export default {
         display: 'Previous(P)',
         local: 'Previous',
         global: 'Previous'
+      },
+      original: {
+        display: 'Original(O)',
+        local: 'Original',
+        global: 'Original'
       },
       scale: {
         display: 'Scale(S)',

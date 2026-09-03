@@ -7,7 +7,6 @@ import {
 import { AcApContext } from '../../app'
 import {
   AcEdBaseView,
-  AcEdCommand,
   AcEdPreviewJig,
   AcEdPromptPointOptions,
   AcEdPromptStatus
@@ -18,17 +17,14 @@ import {
   AcApHtmlLivePreview,
   acapStrokeLiveSegment
 } from '../overlay/AcApHtmlLivePreview'
-import {
-  configureMarkupCommand,
-  createMarkupMeta,
-  withMarkupInput
-} from './AcApMarkupCmdUtil'
+import { createMarkupMeta } from './AcApMarkupCmdUtil'
+import { AcApMarkupDrawCmd } from './AcApMarkupDrawCmd'
 import { commitMarkup } from './AcApMarkupPresenter'
 import { MARKUP_LIVE_LAYER } from './AcApMarkupStore'
 import type { AcApMarkupRecord } from './AcApMarkupTypes'
 import {
   defaultMarkupColor,
-  getMarkupLineWeight,
+  MARKUP_LINE_WEIGHT,
   markupCanvasLineWidth,
   markupColorToCss
 } from './AcApMarkupUtil'
@@ -84,9 +80,16 @@ class AcApMarkupLineJig extends AcEdPreviewJig<AcGePoint3dLike> {
     this._color = defaultMarkupColor()
     this._badge.setColor(this._color)
 
-    const lineWidth = markupCanvasLineWidth(getMarkupLineWeight())
+    const lineWidth = markupCanvasLineWidth(MARKUP_LINE_WEIGHT)
     this._preview.acapSetDraw((ctx, view) => {
-      acapStrokeLiveSegment(ctx, view, this._p1, this._p2, this._color, lineWidth)
+      acapStrokeLiveSegment(
+        ctx,
+        view,
+        this._p1,
+        this._p2,
+        this._color,
+        lineWidth
+      )
     })
 
     this._badge.setPosition({
@@ -106,14 +109,9 @@ class AcApMarkupLineJig extends AcEdPreviewJig<AcGePoint3dLike> {
 /**
  * Create a line markup between two points.
  */
-export class AcApMarkupLineCmd extends AcEdCommand {
-  constructor() {
-    super()
-    configureMarkupCommand(this)
-  }
-
+export class AcApMarkupLineCmd extends AcApMarkupDrawCmd {
   async execute(context: AcApContext) {
-    await withMarkupInput(context, async () => {
+    await this.withMarkupInput(context, async () => {
       const color = defaultMarkupColor()
       const p1Prompt = new AcEdPromptPointOptions(
         AcApI18n.t('jig.markup.line.firstPoint')
@@ -137,7 +135,7 @@ export class AcApMarkupLineCmd extends AcEdCommand {
         type: 'line',
         style: {
           color: markupColorToCss(color),
-          lineWeight: getMarkupLineWeight()
+          lineWeight: MARKUP_LINE_WEIGHT
         },
         geometry: {
           type: 'line',

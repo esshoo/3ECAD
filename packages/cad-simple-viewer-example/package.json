@@ -1,7 +1,7 @@
 {
   "name": "@mlightcad/cad-simple-viewer-example",
   "private": true,
-  "version": "1.6.2",
+  "version": "1.6.3",
   "type": "module",
   "repository": {
     "type": "git",
@@ -23,8 +23,8 @@
     "@mlightcad/cad-simple-ui-plugin": "workspace:*",
     "@mlightcad/cad-svg-plugin": "workspace:*",
     "@mlightcad/cad-simple-viewer": "workspace:*",
-    "@mlightcad/data-model": "^1.14.1",
-    "@mlightcad/libredwg-converter": "^3.14.1",
+    "@mlightcad/data-model": "^1.14.3",
+    "@mlightcad/libredwg-converter": "^3.14.3",
     "@mlightcad/mtext-renderer": "^0.12.4",
     "@mlightcad/three-renderer": "workspace:*",
     "lodash-es": "4.17.21",

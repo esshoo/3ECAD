@@ -280,6 +280,9 @@ export default {
     measurementvis: {
       description: 'Shows or hides measurements on the current layout'
     },
+    measurementpanel: {
+      description: 'Opens the measurement palette'
+    },
     measurementexport: {
       description: 'Exports measurements to a sidecar JSON file'
     },
@@ -298,6 +301,10 @@ export default {
     },
     measuredistance: {
       description: 'Measures the distance and delta values between two points'
+    },
+    measurecontinuous: {
+      description:
+        'Measures chained distances by picking successive points until Enter or Cancel'
     },
     measurepoint: {
       description: 'Measures the X/Y coordinates of a picked point'
@@ -473,6 +480,10 @@ export default {
     },
     switchbg: {
       description: 'Toggles the drawing area background between white and black'
+    },
+    readingmode: {
+      description:
+        'Toggles reading mode: black linework on a white canvas for easier review'
     },
     unisolateobjects: {
       description: 'Redisplay all objects hidden by HIDEOBJECTS'

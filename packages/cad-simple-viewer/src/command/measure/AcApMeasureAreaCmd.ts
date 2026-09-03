@@ -1,19 +1,12 @@
 import { AcCmColor, AcDbDatabase, AcGePoint3dLike } from '@mlightcad/data-model'
-import {
-  AcTrHtmlBadge,
-  AcTrHtmlCanvasOverlay
-} from '@mlightcad/three-renderer'
+import { AcTrHtmlBadge, AcTrHtmlCanvasOverlay } from '@mlightcad/three-renderer'
 
 import { AcApContext } from '../../app'
 import {
   AcEdBaseView,
-  AcEdCommand,
-  AcEdCorsorType,
-  AcEdOpenMode,
   AcEdPreviewJig,
   AcEdPromptPointOptions,
-  AcEdPromptStatus,
-  AcEdViewMode
+  AcEdPromptStatus
 } from '../../editor'
 import { AcApI18n } from '../../i18n'
 import {
@@ -23,9 +16,14 @@ import {
   acapGetMeasurementColor,
   acapMeasurementCanvasLineWidth,
   type AcApMeasurementStyle,
-  formatMeasurementLength
+  formatMeasurementArea
 } from '../../util'
 import { AcTrView2d } from '../../view'
+import {
+  acapOverlayDash,
+  acapScaledOverlayLineWidth
+} from '../overlay/AcApOverlayDrawUtil'
+import { AcApMeasureDrawCmd } from './AcApMeasureDrawCmd'
 import { MEASUREMENT_LIVE_LAYER } from './AcApMeasurementStore'
 import { AcApMeasureAreaEntity } from './entity'
 
@@ -126,12 +124,7 @@ export function placeAreaMeasurement(
  * and badge. The filled area canvas is managed with a viewChanged listener
  * cleaned up via {@link commitMeasurementGroup}.
  */
-export class AcApMeasureAreaCmd extends AcEdCommand {
-  constructor() {
-    super()
-    this.mode = AcEdOpenMode.Read
-  }
-
+export class AcApMeasureAreaCmd extends AcApMeasureDrawCmd {
   async execute(context: AcApContext) {
     const editor = context.view.editor
     const db = context.doc.database
@@ -210,8 +203,13 @@ export class AcApMeasureAreaCmd extends AcEdCommand {
         for (let i = 1; i < confirmedSpts.length; i++)
           ctx.lineTo(confirmedSpts[i].x, confirmedSpts[i].y)
         ctx.strokeStyle = acapCssColor(color)
-        ctx.lineWidth = canvasLineWidth
-        ctx.setLineDash([8, 5])
+        const strokeWidth = acapScaledOverlayLineWidth(
+          canvasLineWidth,
+          fillCanvas,
+          context.view
+        )
+        ctx.lineWidth = strokeWidth
+        ctx.setLineDash(acapOverlayDash(strokeWidth, canvasLineWidth))
         ctx.stroke()
         ctx.setLineDash([])
       }
@@ -224,7 +222,11 @@ export class AcApMeasureAreaCmd extends AcEdCommand {
         ctx.moveTo(last.x, last.y)
         ctx.lineTo(sc.x, sc.y)
         ctx.strokeStyle = acapCssColor(color)
-        ctx.lineWidth = canvasLineWidth
+        ctx.lineWidth = acapScaledOverlayLineWidth(
+          canvasLineWidth,
+          fillCanvas,
+          context.view
+        )
         ctx.stroke()
       }
 
@@ -241,85 +243,81 @@ export class AcApMeasureAreaCmd extends AcEdCommand {
     }
 
     try {
-      await context.view.withMode(AcEdViewMode.SELECTION, () =>
-        editor.withCursor(AcEdCorsorType.Crosshair, async () => {
-          const p1Result = await editor.getPoint(
-            new AcEdPromptPointOptions(AcApI18n.t('jig.measureArea.firstPoint'))
-          )
-          if (p1Result.status !== AcEdPromptStatus.OK) return
-          const p1 = p1Result.value!
-          points.push(p1)
-          drawPolygon()
+      await this.withMeasureInput(context, async () => {
+        const p1Result = await editor.getPoint(
+          new AcEdPromptPointOptions(AcApI18n.t('jig.measureArea.firstPoint'))
+        )
+        if (p1Result.status !== AcEdPromptStatus.OK) return
+        const p1 = p1Result.value!
+        points.push(p1)
+        drawPolygon()
 
-          try {
-            while (points.length < 50) {
-              const prompt = new AcEdPromptPointOptions(
-                AcApI18n.t('jig.measureArea.nextPoint')
-              )
-              prompt.useBasePoint = true
-              // Allow the user to press Enter (without typing coordinates) to
-              // finish picking vertices and close the area polygon.
-              prompt.allowNone = true
+        try {
+          while (points.length < 50) {
+            const prompt = new AcEdPromptPointOptions(
+              AcApI18n.t('jig.measureArea.nextPoint')
+            )
+            prompt.useBasePoint = true
+            // Allow the user to press Enter (without typing coordinates) to
+            // finish picking vertices and close the area polygon.
+            prompt.allowNone = true
 
-              const onMove = (cursor: AcGePoint3dLike) => {
-                if (points.length < 2) {
-                  // Still stroke rubber-band from first point while picking 2nd
-                  drawPolygon(cursor)
-                  return
-                }
-                const tempPts = [...points, cursor]
-                const area = shoelaceArea(tempPts)
-                liveBadge.setText(
-                  `${formatMeasurementLength(db, area)}²`
-                )
-                liveBadge.setPosition(centroid(tempPts))
-                liveBadge.object.visible = true
+            const onMove = (cursor: AcGePoint3dLike) => {
+              if (points.length < 2) {
+                // Still stroke rubber-band from first point while picking 2nd
                 drawPolygon(cursor)
+                return
               }
-
-              prompt.jig = new AcApMeasureAreaJig(
-                context.view,
-                points[points.length - 1],
-                color,
-                onMove
-              )
-
-              const pResult = await editor.getPoint(prompt)
-              if (pResult.status !== AcEdPromptStatus.OK) break
-              const p = pResult.value!
-              liveBadge.object.visible = false
-
-              if (points.length >= 3) {
-                const sp = context.view.worldToScreen(p)
-                const snap = (anchor: AcGePoint3dLike) => {
-                  const sa = context.view.worldToScreen(anchor)
-                  const dx = sp.x - sa.x
-                  const dy = sp.y - sa.y
-                  return dx * dx + dy * dy <= 14 * 14
-                }
-                if (snap(points[0]) || snap(points[points.length - 1])) break
-              }
-
-              if (points.length >= 3) {
-                const last = points[points.length - 1]
-                let crosses = false
-                for (let i = 0; i < points.length - 2; i++) {
-                  if (segmentsIntersect(last, p, points[i], points[i + 1])) {
-                    crosses = true
-                    break
-                  }
-                }
-                if (crosses) break
-              }
-
-              points.push(p)
-              drawPolygon()
+              const tempPts = [...points, cursor]
+              const area = shoelaceArea(tempPts)
+              liveBadge.setText(formatMeasurementArea(db, area))
+              liveBadge.setPosition(centroid(tempPts))
+              liveBadge.object.visible = true
+              drawPolygon(cursor)
             }
-          } catch {
-            // user pressed Enter/ESC to finish
+
+            prompt.jig = new AcApMeasureAreaJig(
+              context.view,
+              points[points.length - 1],
+              color,
+              onMove
+            )
+
+            const pResult = await editor.getPoint(prompt)
+            if (pResult.status !== AcEdPromptStatus.OK) break
+            const p = pResult.value!
+            liveBadge.object.visible = false
+
+            if (points.length >= 3) {
+              const sp = context.view.worldToScreen(p)
+              const snap = (anchor: AcGePoint3dLike) => {
+                const sa = context.view.worldToScreen(anchor)
+                const dx = sp.x - sa.x
+                const dy = sp.y - sa.y
+                return dx * dx + dy * dy <= 14 * 14
+              }
+              if (snap(points[0]) || snap(points[points.length - 1])) break
+            }
+
+            if (points.length >= 3) {
+              const last = points[points.length - 1]
+              let crosses = false
+              for (let i = 0; i < points.length - 2; i++) {
+                if (segmentsIntersect(last, p, points[i], points[i + 1])) {
+                  crosses = true
+                  break
+                }
+              }
+              if (crosses) break
+            }
+
+            points.push(p)
+            drawPolygon()
           }
-        })
-      )
+        } catch {
+          // user pressed Enter/ESC to finish
+        }
+      })
     } finally {
       cleanupLive()
     }

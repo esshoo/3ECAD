@@ -20,13 +20,11 @@ import {
   acapDrawStyleKindForCommand,
   acapGetMeasurementColor,
   acapGetMeasurementFontSize,
-  acapGetMeasurementLineWeight,
   AcApOpenCmd,
   AcApQNewCmd,
   acapRunDatabaseEdit,
   acapSetMeasurementDrawColor,
   acapSetMeasurementDrawFontSize,
-  acapSetMeasurementDrawLineWeight,
   type AcEdCommandEventArgs,
   AcEdOpenMode,
   type AcTrView2d,
@@ -37,16 +35,15 @@ import {
   getActiveMeasurementStyle,
   getEffectiveMeasurementUnits,
   getMarkupFontSize,
-  getMarkupLineWeight,
   getMarkupStore,
   getSelectedMeasurementId,
   isMarkupVisible,
   isMeasurementVisible,
   markupColorToCss,
+  MEASUREMENT_LENGTH_UNIT_FOLLOW_DRAWING,
   refreshMeasurementValueLabels,
   setMarkupDrawColor,
   setMarkupDrawFontSize,
-  setMarkupDrawLineWeight,
   setMeasurementUnitOverride,
   subscribeMeasurementSelection
 } from '@mlightcad/cad-simple-viewer'
@@ -104,16 +101,12 @@ import {
   circleTanTanTan,
   circleThreePoints,
   circleTwoPoints,
-  clearMeasurements,
   countlist,
   defineAttribute,
   editAttribute,
   ellipseArc,
   ellipseCenter,
-  exportIcon,
   hatch,
-  importIcon,
-  layer,
   layerCurrent,
   layerFreeze,
   layerIsolate,
@@ -125,12 +118,6 @@ import {
   layerUnisolate,
   layerUnlock,
   line,
-  markupPanel,
-  measureAngle,
-  measureArc,
-  measureArea,
-  measureDistance,
-  measurePoint,
   mline,
   move,
   mtext,
@@ -142,15 +129,31 @@ import {
   qselect,
   ray,
   rect,
-  revCircle,
-  revCloud,
   revFreeDraw,
-  revRect,
-  revText,
   setting,
   splineFitPoints,
   xline
 } from '../../svg'
+import {
+  clearMarkups,
+  clearMeasurements,
+  exportIcon,
+  importIcon,
+  layer,
+  markupLine,
+  markupPanel,
+  measureAngle,
+  measureArc,
+  measureArea,
+  measureContinuous,
+  measureDistance,
+  measurementPanel,
+  measurePoint,
+  revCircle,
+  revCloud,
+  revRect,
+  revText
+} from '../../svg/toolbarIcons'
 import MlBlockInsertGallery from '../common/MlBlockInsertGallery.vue'
 import MlLayerSelect from '../common/MlLayerSelect.vue'
 import MlCharacterMapDialog from '../dialog/MlCharacterMapDialog.vue'
@@ -195,16 +198,15 @@ const isMarkupOverlayVisible = ref(true)
 const isMeasurementOverlayVisible = ref(true)
 const markupDrawColor = shallowRef(defaultMarkupColor())
 const markupDrawColorDisplay = ref(markupColorToCss(markupDrawColor.value))
-const markupDrawLineWeight = ref<AcGiLineWeight>(getMarkupLineWeight())
 const markupDrawFontSize = ref(getMarkupFontSize())
 const measurementDrawColor = shallowRef(new AcCmColor())
 const measurementDrawColorDisplay = ref('#7b8794')
-const measurementDrawLineWeight = ref<AcGiLineWeight>(acapGetMeasurementLineWeight())
 const measurementDrawFontSize = ref(acapGetMeasurementFontSize())
 const measurementLunits = ref(AcDbLinearUnits.Decimal)
 const measurementLuprec = ref(4)
 const measurementAunits = ref(AcDbAngleUnits.DecimalDegrees)
 const measurementAuprec = ref(0)
+const measurementLengthUnit = ref<number>(MEASUREMENT_LENGTH_UNIT_FOLLOW_DRAWING)
 const isRibbonDisabled = computed(() => isDocumentOpening.value)
 const ribbonColor = ref<AcCmColor | undefined>(new AcCmColor())
 const ribbonColorDisplay = ref('#7b8794')
@@ -780,9 +782,6 @@ const syncMarkupStyleControls = () => {
     const color = cssToMarkupColor(selected.style.color)
     markupDrawColor.value = color
     markupDrawColorDisplay.value = selected.style.color
-    markupDrawLineWeight.value =
-      (selected.style.lineWeight as AcGiLineWeight | undefined) ??
-      getMarkupLineWeight()
     markupDrawFontSize.value =
       selected.style.fontSize != null && selected.style.fontSize > 0
         ? selected.style.fontSize
@@ -790,7 +789,6 @@ const syncMarkupStyleControls = () => {
   } else {
     markupDrawColor.value = defaultMarkupColor()
     markupDrawColorDisplay.value = markupColorToCss(markupDrawColor.value)
-    markupDrawLineWeight.value = getMarkupLineWeight()
     markupDrawFontSize.value = getMarkupFontSize()
   }
   scheduleActivateRibbonTabForOverlaySelection()
@@ -800,7 +798,7 @@ const syncMarkupStyleControls = () => {
  * Apply a style patch to the currently selected markup and republish it.
  */
 const patchSelectedMarkupStyle = (
-  patch: Partial<{ color: string; lineWeight: number; fontSize: number }>
+  patch: Partial<{ color: string; fontSize: number }>
 ) => {
   const view = AcApDocManager.instance?.curView
   if (view) applyMarkupStyleToSelection(view, patch)
@@ -819,16 +817,6 @@ const handleMarkupDrawColorChange = (value?: AcCmColor) => {
 }
 
 /**
- * Updates the session markup draw line weight used by subsequent markup commands.
- * When a markup is selected, also updates that markup's line weight.
- */
-const handleMarkupDrawLineWeightChange = (value: AcGiLineWeight) => {
-  setMarkupDrawLineWeight(value)
-  markupDrawLineWeight.value = value
-  patchSelectedMarkupStyle({ lineWeight: value })
-}
-
-/**
  * Updates the session markup draw font size used by text / callout markups.
  * When a markup is selected, also updates that markup's font size.
  */
@@ -843,7 +831,6 @@ const syncMeasurementStyleControls = () => {
   if (selected) {
     measurementDrawColor.value = selected.color.clone()
     measurementDrawColorDisplay.value = acapCssColor(selected.color)
-    measurementDrawLineWeight.value = selected.lineWeight
     measurementDrawFontSize.value = selected.fontSize
   } else {
     const db = getCurrentDatabase()
@@ -852,7 +839,6 @@ const syncMeasurementStyleControls = () => {
       measurementDrawColor.value = color.clone()
       measurementDrawColorDisplay.value = acapCssColor(color)
     }
-    measurementDrawLineWeight.value = acapGetMeasurementLineWeight()
     measurementDrawFontSize.value = acapGetMeasurementFontSize()
   }
   scheduleActivateRibbonTabForOverlaySelection()
@@ -865,13 +851,6 @@ const handleMeasurementDrawColorChange = (value?: AcCmColor) => {
   measurementDrawColorDisplay.value = acapCssColor(value)
   const view = AcApDocManager.instance?.curView as AcTrView2d | undefined
   if (view) applyMeasurementStyleToSelection(view, { color: value })
-}
-
-const handleMeasurementDrawLineWeightChange = (value: AcGiLineWeight) => {
-  acapSetMeasurementDrawLineWeight(value)
-  measurementDrawLineWeight.value = value
-  const view = AcApDocManager.instance?.curView as AcTrView2d | undefined
-  if (view) applyMeasurementStyleToSelection(view, { lineWeight: value })
 }
 
 const handleMeasurementDrawFontSizeChange = (value: number) => {
@@ -891,6 +870,7 @@ const syncMeasurementUnitControls = () => {
   measurementLuprec.value = units.luprec
   measurementAunits.value = units.aunits
   measurementAuprec.value = units.auprec
+  measurementLengthUnit.value = units.lengthUnit
 }
 
 const refreshCurrentMeasurementLabels = () => {
@@ -906,6 +886,7 @@ const applyMeasurementUnitOverride = (
     luprec: number
     aunits: number
     auprec: number
+    lengthUnit: number
   }>
 ) => {
   setMeasurementUnitOverride(patch)
@@ -927,6 +908,10 @@ const handleMeasurementAunitsChange = (value: number) => {
 
 const handleMeasurementAuprecChange = (value: number) => {
   applyMeasurementUnitOverride({ auprec: value })
+}
+
+const handleMeasurementLengthUnitChange = (value: number) => {
+  applyMeasurementUnitOverride({ lengthUnit: value })
 }
 
 /**
@@ -1107,6 +1092,7 @@ const buildBaseTabs = (
   }
   const verticalToolbarDescriptions = {
     measureDistance: t('main.verticalToolbar.measureDistance.description'),
+    measureContinuous: t('main.verticalToolbar.measureContinuous.description'),
     measureAngle: t('main.verticalToolbar.measureAngle.description'),
     measureArea: t('main.verticalToolbar.measureArea.description'),
     measureArc: t('main.verticalToolbar.measureArc.description'),
@@ -1134,30 +1120,11 @@ const buildBaseTabs = (
       props: { icon: revCloud }
     },
     {
-      id: 'cmd-tool-markup-callout',
-      type: 'button',
-      label: t('main.verticalToolbar.markupCallout.text'),
-      tooltip: t('main.verticalToolbar.markupCallout.description'),
-      size: 'large',
-      props: { icon: ChatLineSquare }
-    },
-    {
-      id: 'cmd-tool-markup-text',
-      type: 'button',
-      label: t('main.verticalToolbar.markupText.text'),
-      tooltip: t('main.verticalToolbar.markupText.description'),
-      size: 'large',
-      props: { icon: revText }
-    }
-  ]
-
-  const reviewShapeItems: RibbonItemModel[] = [
-    {
       id: 'cmd-tool-markup-rect',
       type: 'button',
       label: t('main.verticalToolbar.markupRect.text'),
       tooltip: t('main.verticalToolbar.markupRect.description'),
-      size: 'small',
+      size: 'large',
       props: { icon: revRect }
     },
     {
@@ -1165,9 +1132,20 @@ const buildBaseTabs = (
       type: 'button',
       label: t('main.verticalToolbar.markupCircle.text'),
       tooltip: t('main.verticalToolbar.markupCircle.description'),
-      size: 'small',
+      size: 'large',
       props: { icon: revCircle }
     },
+    {
+      id: 'cmd-tool-markup-callout',
+      type: 'button',
+      label: t('main.verticalToolbar.markupCallout.text'),
+      tooltip: t('main.verticalToolbar.markupCallout.description'),
+      size: 'large',
+      props: { icon: ChatLineSquare }
+    }
+  ]
+
+  const reviewShapeItems: RibbonItemModel[] = [
     {
       id: 'cmd-tool-markup-arrow',
       type: 'button',
@@ -1175,6 +1153,22 @@ const buildBaseTabs = (
       tooltip: t('main.verticalToolbar.markupArrow.description'),
       size: 'small',
       props: { icon: Right }
+    },
+    {
+      id: 'cmd-tool-markup-line',
+      type: 'button',
+      label: t('main.verticalToolbar.markupLine.text'),
+      tooltip: t('main.verticalToolbar.markupLine.description'),
+      size: 'small',
+      props: { icon: markupLine }
+    },
+    {
+      id: 'cmd-tool-markup-text',
+      type: 'button',
+      label: t('main.verticalToolbar.markupText.text'),
+      tooltip: t('main.verticalToolbar.markupText.description'),
+      size: 'small',
+      props: { icon: revText }
     }
   ]
 
@@ -1238,7 +1232,7 @@ const buildBaseTabs = (
       label: t('main.verticalToolbar.clearMarkups.text'),
       tooltip: verticalToolbarDescriptions.clearMarkups,
       size: 'small',
-      props: { icon: Delete }
+      props: { icon: clearMarkups }
     }
   ]
 
@@ -1256,22 +1250,6 @@ const buildBaseTabs = (
           placeholder: t('main.ribbon.property.color'),
           controlWidth: OVERLAY_STYLE_CONTROL_WIDTH,
           'onUpdate:modelValue': handleMarkupDrawColorChange
-        }
-      }
-    },
-    {
-      id: 'markup-draw-line-weight',
-      type: 'custom',
-      size: 'small',
-      tooltip: t('main.verticalToolbar.markupLineWeight.description'),
-      props: {
-        component: MlRibbonPropertyLineWeightSelect,
-        componentProps: {
-          modelValue: markupDrawLineWeight.value,
-          placeholder: t('main.ribbon.property.lineWeight'),
-          numericOnly: true,
-          controlWidth: OVERLAY_STYLE_CONTROL_WIDTH,
-          'onUpdate:modelValue': handleMarkupDrawLineWeightChange
         }
       }
     },
@@ -1301,6 +1279,14 @@ const buildBaseTabs = (
       tooltip: verticalToolbarDescriptions.measureDistance,
       size: 'large',
       props: { icon: measureDistance }
+    },
+    {
+      id: 'cmd-tool-measure-continuous',
+      type: 'button',
+      label: t('main.verticalToolbar.measureContinuous.text'),
+      tooltip: verticalToolbarDescriptions.measureContinuous,
+      size: 'large',
+      props: { icon: measureContinuous }
     },
     {
       id: 'cmd-tool-measure-angle',
@@ -1333,6 +1319,14 @@ const buildBaseTabs = (
       tooltip: verticalToolbarDescriptions.measurePoint,
       size: 'large',
       props: { icon: measurePoint }
+    },
+    {
+      id: 'cmd-tool-measurement-panel',
+      type: 'button',
+      label: t('main.verticalToolbar.measurementPanel.text'),
+      tooltip: t('main.verticalToolbar.measurementPanel.description'),
+      size: 'large',
+      props: { icon: measurementPanel }
     },
     {
       id: 'cmd-tool-measurement-vis',
@@ -1445,22 +1439,6 @@ const buildBaseTabs = (
       }
     },
     {
-      id: 'measurement-draw-line-weight',
-      type: 'custom',
-      size: 'small',
-      tooltip: t('main.verticalToolbar.measurementLineWeight.description'),
-      props: {
-        component: MlRibbonPropertyLineWeightSelect,
-        componentProps: {
-          modelValue: measurementDrawLineWeight.value,
-          placeholder: t('main.ribbon.property.lineWeight'),
-          numericOnly: true,
-          controlWidth: OVERLAY_STYLE_CONTROL_WIDTH,
-          'onUpdate:modelValue': handleMeasurementDrawLineWeightChange
-        }
-      }
-    },
-    {
       id: 'measurement-draw-font-size',
       type: 'custom',
       size: 'small',
@@ -1517,20 +1495,60 @@ const buildBaseTabs = (
       collections: [
         {
           id: 'measurement-length-units-main',
-          layout: 'row',
+          layout: 'column',
+          rows: 3,
           items: [
             {
-              id: 'measurement-length-units-panel',
+              id: 'measurement-length-units-type',
               type: 'custom',
               size: 'small',
               props: {
                 component: MlRibbonMeasurementUnitsPanel,
                 componentProps: {
                   kind: 'length',
+                  field: 'unitType',
                   unitType: measurementLunits.value,
                   precision: measurementLuprec.value,
+                  lengthUnit: measurementLengthUnit.value,
                   'onUpdate:unitType': handleMeasurementLunitsChange,
-                  'onUpdate:precision': handleMeasurementLuprecChange
+                  'onUpdate:precision': handleMeasurementLuprecChange,
+                  'onUpdate:lengthUnit': handleMeasurementLengthUnitChange
+                }
+              }
+            },
+            {
+              id: 'measurement-length-units-precision',
+              type: 'custom',
+              size: 'small',
+              props: {
+                component: MlRibbonMeasurementUnitsPanel,
+                componentProps: {
+                  kind: 'length',
+                  field: 'precision',
+                  unitType: measurementLunits.value,
+                  precision: measurementLuprec.value,
+                  lengthUnit: measurementLengthUnit.value,
+                  'onUpdate:unitType': handleMeasurementLunitsChange,
+                  'onUpdate:precision': handleMeasurementLuprecChange,
+                  'onUpdate:lengthUnit': handleMeasurementLengthUnitChange
+                }
+              }
+            },
+            {
+              id: 'measurement-length-units-unit',
+              type: 'custom',
+              size: 'small',
+              props: {
+                component: MlRibbonMeasurementUnitsPanel,
+                componentProps: {
+                  kind: 'length',
+                  field: 'lengthUnit',
+                  unitType: measurementLunits.value,
+                  precision: measurementLuprec.value,
+                  lengthUnit: measurementLengthUnit.value,
+                  'onUpdate:unitType': handleMeasurementLunitsChange,
+                  'onUpdate:precision': handleMeasurementLuprecChange,
+                  'onUpdate:lengthUnit': handleMeasurementLengthUnitChange
                 }
               }
             }
@@ -1545,16 +1563,34 @@ const buildBaseTabs = (
       collections: [
         {
           id: 'measurement-angle-units-main',
-          layout: 'row',
+          layout: 'column',
+          rows: 3,
           items: [
             {
-              id: 'measurement-angle-units-panel',
+              id: 'measurement-angle-units-type',
               type: 'custom',
               size: 'small',
               props: {
                 component: MlRibbonMeasurementUnitsPanel,
                 componentProps: {
                   kind: 'angle',
+                  field: 'unitType',
+                  unitType: measurementAunits.value,
+                  precision: measurementAuprec.value,
+                  'onUpdate:unitType': handleMeasurementAunitsChange,
+                  'onUpdate:precision': handleMeasurementAuprecChange
+                }
+              }
+            },
+            {
+              id: 'measurement-angle-units-precision',
+              type: 'custom',
+              size: 'small',
+              props: {
+                component: MlRibbonMeasurementUnitsPanel,
+                componentProps: {
+                  kind: 'angle',
+                  field: 'precision',
                   unitType: measurementAunits.value,
                   precision: measurementAuprec.value,
                   'onUpdate:unitType': handleMeasurementAunitsChange,
@@ -1912,8 +1948,6 @@ const buildBaseTabs = (
           id: 'home-layer',
           title: t('main.ribbon.group.layer'),
           orientation: 'row',
-          enableGroupOverflow: true,
-          priority: 90,
           collections: [
             {
               id: 'home-layer-button',
@@ -2046,7 +2080,6 @@ const buildBaseTabs = (
           id: 'home-properties',
           title: t('main.ribbon.group.properties'),
           orientation: 'row',
-          priority: 20,
           collections: [
             {
               id: 'home-properties-button',
@@ -2321,20 +2354,19 @@ const ribbonData = computed(() => {
   const openMode = docOpenMode.value
   const markupVisible = isMarkupOverlayVisible.value
   const measurementVisible = isMeasurementOverlayVisible.value
-  // Track markup draw style so Review ribbon color / lineweight controls refresh.
+  // Track markup draw style so Review ribbon color / font controls refresh.
   markupDrawColor.value
   markupDrawColorDisplay.value
-  markupDrawLineWeight.value
   markupDrawFontSize.value
   // Track measurement draw style so Measurement ribbon controls refresh.
   measurementDrawColor.value
   measurementDrawColorDisplay.value
-  measurementDrawLineWeight.value
   measurementDrawFontSize.value
   measurementLunits.value
   measurementLuprec.value
   measurementAunits.value
   measurementAuprec.value
+  measurementLengthUnit.value
   const commandByItemId = new Map<string, string>()
   commandByItemId.set('cmd-line', 'line')
   commandByItemId.set('cmd-polyline', 'pline')
@@ -2400,6 +2432,7 @@ const ribbonData = computed(() => {
   commandByItemId.set('cmd-tool-markup-rect', 'markuprect')
   commandByItemId.set('cmd-tool-markup-circle', 'markupcircle')
   commandByItemId.set('cmd-tool-markup-arrow', 'markuparrow')
+  commandByItemId.set('cmd-tool-markup-line', 'markupline')
   commandByItemId.set('cmd-tool-markup-callout', 'markupcallout')
   commandByItemId.set('cmd-tool-markup-stamp', 'markupstamp')
   commandByItemId.set('cmd-tool-markup-import', 'markupimport')
@@ -2407,10 +2440,12 @@ const ribbonData = computed(() => {
   commandByItemId.set('cmd-tool-markup-vis', 'markupvis')
   commandByItemId.set('cmd-tool-markup-clear', 'clearmarkups')
   commandByItemId.set('cmd-tool-measure-distance', 'measuredistance')
+  commandByItemId.set('cmd-tool-measure-continuous', 'measurecontinuous')
   commandByItemId.set('cmd-tool-measure-angle', 'measureangle')
   commandByItemId.set('cmd-tool-measure-area', 'measurearea')
   commandByItemId.set('cmd-tool-measure-arc', 'measurearc')
   commandByItemId.set('cmd-tool-measure-point', 'measurepoint')
+  commandByItemId.set('cmd-tool-measurement-panel', 'measurementpanel')
   commandByItemId.set('cmd-tool-measurement-vis', 'measurementvis')
   commandByItemId.set('cmd-tool-measurement-import', 'measurementimport')
   commandByItemId.set('cmd-tool-measurement-export', 'measurementexport')
@@ -2636,10 +2671,7 @@ const handleFileMenuSelect = async (command: string) => {
         />
       </template>
     </ml-ribbon>
-    <ml-ribbon-file-name
-      v-if="features.isShowFileName"
-      :container-el="ribbonContainerRef"
-    />
+    <ml-ribbon-file-name :container-el="ribbonContainerRef" />
     <ml-character-map-dialog
       v-model="mtextCharacterMapVisible"
       :font-options="mtextCharacterMapFontOptions"

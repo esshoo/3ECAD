@@ -7,10 +7,14 @@ import {
   distPointToSegmentPx,
   pointInRectPx
 } from '../../util/AcApScreenHitTest'
+import type { AcApMarkupShapeOutline } from './AcApMarkupShapeCallout'
 import type {
   AcApMarkupAttachedCallout,
+  AcApMarkupCircleGeometry,
+  AcApMarkupCloudGeometry,
   AcApMarkupGeometry,
-  AcApMarkupPoint2d
+  AcApMarkupPoint2d,
+  AcApMarkupRectGeometry
 } from './AcApMarkupTypes'
 
 /** Extra hit slop for revision-cloud lobes around the AABB. */
@@ -188,10 +192,38 @@ function expandAttachedCallout(
 }
 
 /**
+ * Grow `box` by the world-space corners of overlay client rectangles.
+ *
+ * Used so zoom-to includes HTML text boxes / badges / stamps whose size is
+ * screen-space, not just geometry control points.
+ *
+ * @param box - World AABB to expand in place.
+ * @param rects - Overlay `getBoundingClientRect()` results.
+ * @param clientToWorld - Converts viewport/client pixels to world XY.
+ */
+export function expandMarkupBoundsByClientRects(
+  box: AcGeBox2d,
+  rects: ReadonlyArray<{
+    left: number
+    top: number
+    right: number
+    bottom: number
+  }>,
+  clientToWorld: (clientX: number, clientY: number) => AcApMarkupPoint2d
+): void {
+  for (const rect of rects) {
+    if (rect.right <= rect.left && rect.bottom <= rect.top) continue
+    box.expandByPoint(clientToWorld(rect.left, rect.top))
+    box.expandByPoint(clientToWorld(rect.right, rect.bottom))
+  }
+}
+
+/**
  * Axis-aligned world bounds of a markup's control geometry.
  *
- * Used for window / crossing box selection. Point-like markups (text / stamp /
- * symbol) use their anchor; shapes include attached callout tip and anchor.
+ * Used for window / crossing box selection and zoom-to. Point-like markups
+ * (text / stamp / symbol) use their anchor; shapes include attached callout
+ * tip and anchor so leaders are part of the same box as the shape.
  */
 export function markupGeometryBounds(
   geometry: AcApMarkupGeometry
@@ -237,6 +269,125 @@ export function markupGeometryBounds(
 }
 
 /**
+ * Cloud / rect / circle geometry that can receive an attached callout.
+ */
+export type AcApMarkupAttachableShapeGeometry =
+  | AcApMarkupCloudGeometry
+  | AcApMarkupRectGeometry
+  | AcApMarkupCircleGeometry
+
+/**
+ * Whether geometry is a cloud / rect / circle with no leader + text box yet.
+ */
+export function isAttachableShapeMarkup(
+  geometry: AcApMarkupGeometry
+): geometry is AcApMarkupAttachableShapeGeometry {
+  return (
+    (geometry.type === 'cloud' ||
+      geometry.type === 'rect' ||
+      geometry.type === 'circle') &&
+    geometry.callout == null
+  )
+}
+
+/**
+ * Shape outline used to constrain an attached-callout leader tip.
+ */
+export function markupShapeOutlineFromGeometry(
+  geometry: AcApMarkupAttachableShapeGeometry
+): AcApMarkupShapeOutline {
+  if (geometry.type === 'circle') {
+    return {
+      kind: 'circle',
+      center: geometry.center,
+      radius: geometry.radius
+    }
+  }
+  return {
+    kind: geometry.type,
+    corner1: geometry.corner1,
+    corner2: geometry.corner2
+  }
+}
+
+/**
+ * Whether a canvas-space pick hits a cloud / rect / circle outer frame
+ * (AABB for cloud/rect, circumference for circle). Does not hit interiors
+ * or an already-attached callout leader.
+ */
+export function hitTestMarkupShapeOutline(
+  geometry: AcApMarkupGeometry,
+  canvas: AcApScreenPoint,
+  worldToScreen: WorldToScreen,
+  threshold: number
+): boolean {
+  switch (geometry.type) {
+    case 'rect': {
+      const a = worldToScreen(geometry.corner1)
+      const b = worldToScreen(geometry.corner2)
+      const minX = Math.min(a.x, b.x)
+      const maxX = Math.max(a.x, b.x)
+      const minY = Math.min(a.y, b.y)
+      const maxY = Math.max(a.y, b.y)
+      const inside =
+        canvas.x >= minX &&
+        canvas.x <= maxX &&
+        canvas.y >= minY &&
+        canvas.y <= maxY
+      if (!inside) {
+        return (
+          distPointToRectOutlinePx(canvas.x, canvas.y, a, b) <= threshold
+        )
+      }
+      const distEdge = Math.min(
+        Math.abs(canvas.x - minX),
+        Math.abs(canvas.x - maxX),
+        Math.abs(canvas.y - minY),
+        Math.abs(canvas.y - maxY)
+      )
+      return distEdge <= threshold
+    }
+    case 'cloud': {
+      const a = worldToScreen(geometry.corner1)
+      const b = worldToScreen(geometry.corner2)
+      const minX = Math.min(a.x, b.x)
+      const maxX = Math.max(a.x, b.x)
+      const minY = Math.min(a.y, b.y)
+      const maxY = Math.max(a.y, b.y)
+      const tol = threshold + CLOUD_HIT_EXTRA_PX
+      const inside =
+        canvas.x >= minX &&
+        canvas.x <= maxX &&
+        canvas.y >= minY &&
+        canvas.y <= maxY
+      if (!inside) {
+        return distPointToRectOutlinePx(canvas.x, canvas.y, a, b) <= tol
+      }
+      const distEdge = Math.min(
+        Math.abs(canvas.x - minX),
+        Math.abs(canvas.x - maxX),
+        Math.abs(canvas.y - minY),
+        Math.abs(canvas.y - maxY)
+      )
+      return distEdge <= tol
+    }
+    case 'circle': {
+      const c = worldToScreen(geometry.center)
+      const rim = worldToScreen({
+        x: geometry.center.x + geometry.radius,
+        y: geometry.center.y
+      })
+      const radius = Math.hypot(rim.x - c.x, rim.y - c.y)
+      return (
+        distPointToCirclePx(canvas.x, canvas.y, c.x, c.y, radius) <= threshold
+      )
+    }
+    default:
+      return false
+  }
+}
+
+/**
  * Whether a canvas-space pick hits a markup's drawn stroke (not HTML capsules).
  *
  * Hollow shapes (rect / cloud / circle) hit on the outline only. Highlights
@@ -259,46 +410,11 @@ export function hitTestMarkupGeometry(
         threshold
       )
     }
-    case 'rect': {
-      if (
-        distPointToRectOutlinePx(
-          canvas.x,
-          canvas.y,
-          worldToScreen(geometry.corner1),
-          worldToScreen(geometry.corner2)
-        ) <= threshold
-      ) {
-        return true
-      }
-      return geometry.callout
-        ? hitTestLeader(geometry.callout, canvas, worldToScreen, threshold)
-        : false
-    }
-    case 'cloud': {
-      if (
-        distPointToRectOutlinePx(
-          canvas.x,
-          canvas.y,
-          worldToScreen(geometry.corner1),
-          worldToScreen(geometry.corner2)
-        ) <=
-        threshold + CLOUD_HIT_EXTRA_PX
-      ) {
-        return true
-      }
-      return geometry.callout
-        ? hitTestLeader(geometry.callout, canvas, worldToScreen, threshold)
-        : false
-    }
+    case 'rect':
+    case 'cloud':
     case 'circle': {
-      const c = worldToScreen(geometry.center)
-      const rim = worldToScreen({
-        x: geometry.center.x + geometry.radius,
-        y: geometry.center.y
-      })
-      const radius = Math.hypot(rim.x - c.x, rim.y - c.y)
       if (
-        distPointToCirclePx(canvas.x, canvas.y, c.x, c.y, radius) <= threshold
+        hitTestMarkupShapeOutline(geometry, canvas, worldToScreen, threshold)
       ) {
         return true
       }

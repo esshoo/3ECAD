@@ -1,5 +1,6 @@
 import {
   type AcApLocale,
+  AcApSettingManager,
   AcEdOpenMode,
   type AcEdUiTheme,
   isMarkupVisible,
@@ -29,55 +30,61 @@ import {
   ICON_MEASURE_ANGLE,
   ICON_MEASURE_ARC,
   ICON_MEASURE_AREA,
+  ICON_MEASURE_CONTINUOUS,
   ICON_MEASURE_DISTANCE,
   ICON_MEASURE_POINT,
+  ICON_MEASUREMENT_PANEL,
   ICON_PAN,
   ICON_PLACEMENT_BOTTOM,
   ICON_PLACEMENT_LEFT,
   ICON_PLACEMENT_RIGHT,
   ICON_PLACEMENT_TOP,
+  ICON_READING_MODE,
   ICON_REV_CIRCLE,
   ICON_REV_CLOUD,
   ICON_REV_RECT,
   ICON_SELECT,
+  ICON_SETTINGS,
+  ICON_SIMULATED_MOUSE,
   ICON_SWITCH_BG,
   ICON_THEME_DARK,
   ICON_THEME_LIGHT,
   ICON_TOOLBAR_PLACEMENT,
   ICON_ZOOM_EXTENT,
+  ICON_ZOOM_ORIGINAL,
   ICON_ZOOM_WINDOW
 } from '../assets/icons'
-import { createLayoutToolbarItem } from './createLayoutToolbarItem'
+import { acuiCreateLayoutToolbarItem } from './createLayoutToolbarItem'
 import type {
-  AcExDefaultToolbarContext,
-  AcExToolbarItem,
-  AcExToolbarPlacement
+  AcUiDefaultToolbarContext,
+  AcUiToolbarItem,
+  AcUiToolbarPlacement
 } from './types'
 
-const TOOLBAR_PLACEMENTS: AcExToolbarPlacement[] = [
+const TOOLBAR_PLACEMENTS: AcUiToolbarPlacement[] = [
   'top',
   'bottom',
   'left',
   'right'
 ]
 
-const PLACEMENT_ICONS: Record<AcExToolbarPlacement, string> = {
+const PLACEMENT_ICONS: Record<AcUiToolbarPlacement, string> = {
   top: ICON_PLACEMENT_TOP,
   bottom: ICON_PLACEMENT_BOTTOM,
   left: ICON_PLACEMENT_LEFT,
   right: ICON_PLACEMENT_RIGHT
 }
 
-const PLACEMENT_LABELS: Record<AcExToolbarPlacement, string> = {
+const PLACEMENT_LABELS: Record<AcUiToolbarPlacement, string> = {
   top: 'toolbar.placementTop',
   bottom: 'toolbar.placementBottom',
   left: 'toolbar.placementLeft',
   right: 'toolbar.placementRight'
 }
 
-function createToolbarPlacementItem(
-  context?: AcExDefaultToolbarContext
-): AcExToolbarItem {
+function acuiCreateToolbarPlacementItem(
+  context?: AcUiDefaultToolbarContext
+): AcUiToolbarItem {
   return {
     id: 'toolbar-placement',
     label: 'toolbar.placement',
@@ -96,29 +103,37 @@ function createToolbarPlacementItem(
   }
 }
 
-const TOOLBAR_LOCALES: AcApLocale[] = ['en', 'zh', 'cs', 'tr']
+const TOOLBAR_LOCALES: AcApLocale[] = ['en', 'zh', 'cs', 'tr', 'ar']
 
 const LOCALE_BADGES: Record<AcApLocale, string> = {
   en: 'EN',
   zh: '中',
   cs: 'CS',
-  tr: 'TR'
+  tr: 'TR',
+  ar: 'AR'
 }
 
 const LOCALE_LABELS: Record<AcApLocale, string> = {
   en: 'toolbar.localeEn',
   zh: 'toolbar.localeZh',
   cs: 'toolbar.localeCs',
-  tr: 'toolbar.localeTr'
+  tr: 'toolbar.localeTr',
+  ar: 'toolbar.localeAr'
 }
 
+/**
+ * Locale short-code badge for toolbar icons.
+ *
+ * Uses HTML text (not SVG `<text>`) so the glyph stays sharp at the 18px
+ * toolbar icon size. SVG text often looks soft/blurry when CSS-scaled.
+ */
 function localeBadgeIcon(badge: string): string {
-  return `<span style="font-size:10px;font-weight:700;line-height:1">${badge}</span>`
+  return `<span class="ml-ex-ui-locale-badge">${badge}</span>`
 }
 
-function createToolbarLocaleItem(
-  context?: AcExDefaultToolbarContext
-): AcExToolbarItem {
+function acuiCreateToolbarLocaleItem(
+  context?: AcUiDefaultToolbarContext
+): AcUiToolbarItem {
   const current = context?.getLocale() ?? 'en'
   return {
     id: 'locale',
@@ -138,22 +153,337 @@ function createToolbarLocaleItem(
   }
 }
 
-/**
- * Builds the built-in toolbar item list (view, layout, measure, review, export, theme, locale).
- *
- * @param context - Optional callbacks for theme, locale, and placement items.
- * @returns Default {@link AcExToolbarItem} array.
- */
-export function createDefaultToolbarItems(
-  context?: AcExDefaultToolbarContext
-): AcExToolbarItem[] {
+function acuiCreateThemeToolbarItem(
+  context?: AcUiDefaultToolbarContext
+): AcUiToolbarItem {
   const getTheme = (): AcEdUiTheme => context?.getTheme() ?? 'light'
   const toggleTheme = () => {
     const next: AcEdUiTheme = getTheme() === 'dark' ? 'light' : 'dark'
     context?.setTheme(next)
   }
+  return {
+    id: 'theme',
+    requiresDocument: false,
+    toggle: {
+      getValue: () => getTheme() === 'light',
+      on: {
+        label: 'toolbar.themeLight',
+        icon: ICON_THEME_LIGHT,
+        action: toggleTheme
+      },
+      off: {
+        label: 'toolbar.themeDark',
+        icon: ICON_THEME_DARK,
+        action: toggleTheme
+      }
+    }
+  }
+}
 
-  const items: AcExToolbarItem[] = [
+/**
+ * Builds the simulated-mouse toggle for touch precise point picking.
+ *
+ * Bound to {@link AcApSettings.useSimulatedMouseOnTouch}. When on, long-press
+ * picks use a crosshair above the finger; when off, the magnifier loupe
+ * tracks the fingertip.
+ *
+ * @returns Toggle toolbar item.
+ */
+function acuiCreateSimulatedMouseToolbarItem(): AcUiToolbarItem {
+  const toggle = () =>
+    AcApSettingManager.instance.toggle('useSimulatedMouseOnTouch')
+  return {
+    id: 'simulated-mouse',
+    requiresDocument: false,
+    toggle: {
+      getValue: () =>
+        !!AcApSettingManager.instance.get('useSimulatedMouseOnTouch'),
+      on: {
+        label: 'toolbar.simulatedMouseOn',
+        icon: ICON_SIMULATED_MOUSE,
+        action: toggle
+      },
+      off: {
+        label: 'toolbar.simulatedMouseOff',
+        icon: ICON_SIMULATED_MOUSE,
+        action: toggle
+      }
+    }
+  }
+}
+
+function acuiCreateMeasureToolbarItem(): AcUiToolbarItem {
+  return {
+    id: 'measure',
+    label: 'toolbar.measure',
+    icon: ICON_MEASURE,
+    childrenUi: 'toolbar',
+    children: [
+      {
+        id: 'measure-distance',
+        label: 'toolbar.measureDistance',
+        icon: ICON_MEASURE_DISTANCE,
+        command: 'measuredistance'
+      },
+      {
+        id: 'measure-continuous',
+        label: 'toolbar.measureContinuous',
+        icon: ICON_MEASURE_CONTINUOUS,
+        command: 'measurecontinuous'
+      },
+      {
+        id: 'measure-angle',
+        label: 'toolbar.measureAngle',
+        icon: ICON_MEASURE_ANGLE,
+        command: 'measureangle'
+      },
+      {
+        id: 'measure-area',
+        label: 'toolbar.measureArea',
+        icon: ICON_MEASURE_AREA,
+        command: 'measurearea'
+      },
+      {
+        id: 'measure-arc',
+        label: 'toolbar.measureArc',
+        icon: ICON_MEASURE_ARC,
+        command: 'measurearc'
+      },
+      {
+        id: 'measure-point',
+        label: 'toolbar.measurePoint',
+        icon: ICON_MEASURE_POINT,
+        command: 'measurepoint'
+      },
+      {
+        id: 'measurement-panel',
+        label: 'toolbar.measurementPanel',
+        icon: ICON_MEASUREMENT_PANEL,
+        command: 'measurementpanel'
+      },
+      {
+        id: 'measurement-vis',
+        toggle: {
+          getValue: isMeasurementVisible,
+          on: {
+            label: 'toolbar.showMeasurements',
+            icon: ICON_ANNOTATION_SHOW,
+            command: 'measurementvis'
+          },
+          off: {
+            label: 'toolbar.hideMeasurements',
+            icon: ICON_ANNOTATION_HIDE,
+            command: 'measurementvis'
+          }
+        }
+      },
+      {
+        id: 'clear-measurements',
+        label: 'toolbar.clearMeasurements',
+        icon: ICON_CLEAR_MEASUREMENTS,
+        command: 'clearmeasurements'
+      },
+      {
+        type: 'separator',
+        id: 'sep-measure-import-export'
+      },
+      {
+        id: 'measurement-import',
+        label: 'toolbar.measurementImport',
+        icon: ICON_MARKUP_IMPORT,
+        command: 'measurementimport'
+      },
+      {
+        id: 'measurement-export',
+        label: 'toolbar.measurementExport',
+        icon: ICON_MARKUP_EXPORT,
+        command: 'measurementexport'
+      }
+    ]
+  }
+}
+
+function acuiCreateAnnotationToolbarItem(): AcUiToolbarItem {
+  return {
+    id: 'annotation',
+    label: 'toolbar.annotation',
+    icon: ICON_ANNOTATION,
+    minOpenMode: AcEdOpenMode.Review,
+    childrenUi: 'toolbar',
+    children: [
+      {
+        id: 'markup-cloud',
+        label: 'toolbar.markupCloud',
+        icon: ICON_REV_CLOUD,
+        command: 'markupcloud'
+      },
+      {
+        id: 'markup-callout',
+        label: 'toolbar.markupCallout',
+        icon: ICON_MARKUP_CALLOUT,
+        command: 'markupcallout'
+      },
+      {
+        id: 'markup-text',
+        label: 'toolbar.markupText',
+        icon: ICON_MARKUP_TEXT,
+        command: 'markuptext'
+      },
+      {
+        id: 'markup-rect',
+        label: 'toolbar.markupRect',
+        icon: ICON_REV_RECT,
+        command: 'markuprect'
+      },
+      {
+        id: 'markup-circle',
+        label: 'toolbar.markupCircle',
+        icon: ICON_REV_CIRCLE,
+        command: 'markupcircle'
+      },
+      {
+        id: 'markup-arrow',
+        label: 'toolbar.markupArrow',
+        icon: ICON_MARKUP_ARROW,
+        command: 'markuparrow'
+      },
+      {
+        id: 'markup-stamp',
+        label: 'toolbar.markupStamp',
+        icon: ICON_MARKUP_STAMP,
+        command: 'markupstamp'
+      },
+      {
+        id: 'markup-panel',
+        label: 'toolbar.markupPanel',
+        icon: ICON_MARKUP_PANEL,
+        command: 'markuppanel'
+      },
+      {
+        id: 'markup-vis',
+        toggle: {
+          getValue: isMarkupVisible,
+          on: {
+            label: 'toolbar.showMarkup',
+            icon: ICON_ANNOTATION_SHOW,
+            command: 'markupvis'
+          },
+          off: {
+            label: 'toolbar.hideMarkup',
+            icon: ICON_ANNOTATION_HIDE,
+            command: 'markupvis'
+          }
+        }
+      },
+      {
+        id: 'clear-markups',
+        label: 'toolbar.clearMarkups',
+        icon: ICON_CLEAR_MARKUPS,
+        command: 'clearmarkups'
+      },
+      {
+        type: 'separator',
+        id: 'sep-markup-import-export'
+      },
+      {
+        id: 'markup-import',
+        label: 'toolbar.markupImport',
+        icon: ICON_MARKUP_IMPORT,
+        command: 'markupimport'
+      },
+      {
+        id: 'markup-export',
+        label: 'toolbar.markupExport',
+        icon: ICON_MARKUP_EXPORT,
+        command: 'markupexport'
+      }
+    ]
+  }
+}
+
+/**
+ * Builds the phone-layout zoom parent with original / extents / window children.
+ *
+ * @returns Zoom toolbar item with dismissible icon sub-toolbar children.
+ */
+export function acuiCreateZoomToolbarItem(): AcUiToolbarItem {
+  return {
+    id: 'zoom',
+    label: 'toolbar.zoom',
+    icon: ICON_ZOOM_EXTENT,
+    childrenUi: 'toolbar',
+    children: [
+      {
+        id: 'zoom-original',
+        label: 'toolbar.zoomOriginal',
+        icon: ICON_ZOOM_ORIGINAL,
+        command: 'zoom\noriginal'
+      },
+      {
+        id: 'zoom-extent',
+        label: 'toolbar.zoomExtent',
+        icon: ICON_ZOOM_EXTENT,
+        command: 'zoom\nall'
+      },
+      {
+        id: 'zoom-window',
+        label: 'toolbar.zoomWindow',
+        icon: ICON_ZOOM_WINDOW,
+        command: 'zoom\nwindow'
+      }
+    ]
+  }
+}
+
+/**
+ * Builds the settings parent (simulated mouse, dock placement, theme, language).
+ *
+ * Used by phone and by desktop/pad so chrome preferences live in one strip.
+ *
+ * @param context - Optional callbacks for theme toggle, locale, and placement.
+ * @returns Settings toolbar item with nested dismissible sub-toolbars.
+ */
+export function acuiCreateSettingsToolbarItem(
+  context?: AcUiDefaultToolbarContext
+): AcUiToolbarItem {
+  return {
+    id: 'settings',
+    label: 'toolbar.settings',
+    icon: ICON_SETTINGS,
+    requiresDocument: false,
+    childrenUi: 'toolbar',
+    children: [
+      acuiCreateSimulatedMouseToolbarItem(),
+      acuiCreateToolbarPlacementItem(context),
+      acuiCreateThemeToolbarItem(context),
+      {
+        id: 'switch-bg',
+        label: 'toolbar.switchBg',
+        icon: ICON_SWITCH_BG,
+        command: 'switchbg'
+      },
+      {
+        id: 'reading-mode',
+        label: 'toolbar.readingMode',
+        icon: ICON_READING_MODE,
+        requiresDocument: true,
+        command: 'readingmode'
+      },
+      acuiCreateToolbarLocaleItem(context)
+    ]
+  }
+}
+
+/**
+ * Builds the built-in desktop/pad toolbar item list.
+ *
+ * @param context - Optional callbacks for theme, locale, and placement items.
+ * @returns Default {@link AcUiToolbarItem} array.
+ */
+export function acuiCreateDefaultToolbarItems(
+  context?: AcUiDefaultToolbarContext
+): AcUiToolbarItem[] {
+  const items: AcUiToolbarItem[] = [
     {
       id: 'select',
       label: 'toolbar.select',
@@ -184,184 +514,9 @@ export function createDefaultToolbarItems(
       icon: ICON_LAYER,
       command: 'layer'
     },
-    createLayoutToolbarItem(),
-    {
-      id: 'switch-bg',
-      label: 'toolbar.switchBg',
-      icon: ICON_SWITCH_BG,
-      command: 'switchbg'
-    },
-    {
-      id: 'measure',
-      label: 'toolbar.measure',
-      icon: ICON_MEASURE,
-      childrenUi: 'sticky-toolbar',
-      children: [
-        {
-          id: 'measure-distance',
-          label: 'toolbar.measureDistance',
-          icon: ICON_MEASURE_DISTANCE,
-          command: 'measuredistance'
-        },
-        {
-          id: 'measure-angle',
-          label: 'toolbar.measureAngle',
-          icon: ICON_MEASURE_ANGLE,
-          command: 'measureangle'
-        },
-        {
-          id: 'measure-area',
-          label: 'toolbar.measureArea',
-          icon: ICON_MEASURE_AREA,
-          command: 'measurearea'
-        },
-        {
-          id: 'measure-arc',
-          label: 'toolbar.measureArc',
-          icon: ICON_MEASURE_ARC,
-          command: 'measurearc'
-        },
-        {
-          id: 'measure-point',
-          label: 'toolbar.measurePoint',
-          icon: ICON_MEASURE_POINT,
-          command: 'measurepoint'
-        },
-        {
-          id: 'measurement-vis',
-          toggle: {
-            getValue: isMeasurementVisible,
-            on: {
-              label: 'toolbar.showMeasurements',
-              icon: ICON_ANNOTATION_SHOW,
-              command: 'measurementvis'
-            },
-            off: {
-              label: 'toolbar.hideMeasurements',
-              icon: ICON_ANNOTATION_HIDE,
-              command: 'measurementvis'
-            }
-          }
-        },
-        {
-          id: 'clear-measurements',
-          label: 'toolbar.clearMeasurements',
-          icon: ICON_CLEAR_MEASUREMENTS,
-          command: 'clearmeasurements'
-        },
-        {
-          type: 'separator',
-          id: 'sep-measure-import-export'
-        },
-        {
-          id: 'measurement-import',
-          label: 'toolbar.measurementImport',
-          icon: ICON_MARKUP_IMPORT,
-          command: 'measurementimport'
-        },
-        {
-          id: 'measurement-export',
-          label: 'toolbar.measurementExport',
-          icon: ICON_MARKUP_EXPORT,
-          command: 'measurementexport'
-        }
-      ]
-    },
-    {
-      id: 'annotation',
-      label: 'toolbar.annotation',
-      icon: ICON_ANNOTATION,
-      minOpenMode: AcEdOpenMode.Review,
-      childrenUi: 'sticky-toolbar',
-      children: [
-        {
-          id: 'markup-cloud',
-          label: 'toolbar.markupCloud',
-          icon: ICON_REV_CLOUD,
-          command: 'markupcloud'
-        },
-        {
-          id: 'markup-callout',
-          label: 'toolbar.markupCallout',
-          icon: ICON_MARKUP_CALLOUT,
-          command: 'markupcallout'
-        },
-        {
-          id: 'markup-text',
-          label: 'toolbar.markupText',
-          icon: ICON_MARKUP_TEXT,
-          command: 'markuptext'
-        },
-        {
-          id: 'markup-rect',
-          label: 'toolbar.markupRect',
-          icon: ICON_REV_RECT,
-          command: 'markuprect'
-        },
-        {
-          id: 'markup-circle',
-          label: 'toolbar.markupCircle',
-          icon: ICON_REV_CIRCLE,
-          command: 'markupcircle'
-        },
-        {
-          id: 'markup-arrow',
-          label: 'toolbar.markupArrow',
-          icon: ICON_MARKUP_ARROW,
-          command: 'markuparrow'
-        },
-        {
-          id: 'markup-stamp',
-          label: 'toolbar.markupStamp',
-          icon: ICON_MARKUP_STAMP,
-          command: 'markupstamp'
-        },
-        {
-          id: 'markup-panel',
-          label: 'toolbar.markupPanel',
-          icon: ICON_MARKUP_PANEL,
-          command: 'markuppanel'
-        },
-        {
-          id: 'markup-vis',
-          toggle: {
-            getValue: isMarkupVisible,
-            on: {
-              label: 'toolbar.showMarkup',
-              icon: ICON_ANNOTATION_SHOW,
-              command: 'markupvis'
-            },
-            off: {
-              label: 'toolbar.hideMarkup',
-              icon: ICON_ANNOTATION_HIDE,
-              command: 'markupvis'
-            }
-          }
-        },
-        {
-          id: 'clear-markups',
-          label: 'toolbar.clearMarkups',
-          icon: ICON_CLEAR_MARKUPS,
-          command: 'clearmarkups'
-        },
-        {
-          type: 'separator',
-          id: 'sep-markup-import-export'
-        },
-        {
-          id: 'markup-import',
-          label: 'toolbar.markupImport',
-          icon: ICON_MARKUP_IMPORT,
-          command: 'markupimport'
-        },
-        {
-          id: 'markup-export',
-          label: 'toolbar.markupExport',
-          icon: ICON_MARKUP_EXPORT,
-          command: 'markupexport'
-        }
-      ]
-    },
+    acuiCreateLayoutToolbarItem(),
+    acuiCreateMeasureToolbarItem(),
+    acuiCreateAnnotationToolbarItem(),
     {
       id: 'export',
       label: 'toolbar.export',
@@ -392,26 +547,35 @@ export function createDefaultToolbarItems(
       type: 'separator',
       id: 'sep-settings'
     },
-    createToolbarPlacementItem(context),
-    {
-      id: 'theme',
-      requiresDocument: false,
-      toggle: {
-        getValue: () => getTheme() === 'light',
-        on: {
-          label: 'toolbar.themeLight',
-          icon: ICON_THEME_LIGHT,
-          action: toggleTheme
-        },
-        off: {
-          label: 'toolbar.themeDark',
-          icon: ICON_THEME_DARK,
-          action: toggleTheme
-        }
-      }
-    },
-    createToolbarLocaleItem(context)
+    acuiCreateSettingsToolbarItem(context)
   ]
 
   return items
+}
+
+/**
+ * Builds the phone-layout toolbar: zoom, measure, annotation, layer, layout, settings.
+ *
+ * @param context - Optional callbacks for theme and locale items under settings.
+ * @returns Default phone {@link AcUiToolbarItem} array.
+ */
+export function acuiCreatePhoneToolbarItems(
+  context?: AcUiDefaultToolbarContext
+): AcUiToolbarItem[] {
+  return [
+    acuiCreateZoomToolbarItem(),
+    acuiCreateMeasureToolbarItem(),
+    {
+      ...acuiCreateAnnotationToolbarItem(),
+      label: 'toolbar.annotationShort'
+    },
+    {
+      id: 'layer',
+      label: 'toolbar.layerShort',
+      icon: ICON_LAYER,
+      command: 'layer'
+    },
+    acuiCreateLayoutToolbarItem(),
+    acuiCreateSettingsToolbarItem(context)
+  ]
 }

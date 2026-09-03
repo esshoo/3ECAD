@@ -11,13 +11,14 @@
     <!-- CAD viewer when a file is selected or a new drawing is created -->
     <div v-else>
       <MlCadViewer
-        locale="en"
+        locale="default"
         :local-file="store.selectedFile ?? undefined"
         :mode="selectedMode"
         :use-main-thread-draw="useMainThreadDraw"
         :draw-no-plot-layers="drawNoPlotLayers"
         :progressive-rendering="progressiveRendering"
         :open-view-mode="openViewMode"
+        :circle-sides="circleSides"
         @create="onViewerCreate"
         :base-url="BASE_URL"
       />
@@ -26,15 +27,15 @@
 </template>
 
 <script setup lang="ts">
-// import { AcApSettingManager } from '@mlightcad/cad-simple-viewer'
 import {
   AcApDocManager,
   AcApOpenViewMode,
+  AcApSettingManager,
   AcEdCommandStack,
   AcEdOpenMode
 } from '@mlightcad/cad-simple-viewer'
 import { MlCadViewer } from '@mlightcad/cad-viewer'
-import { log } from '@mlightcad/data-model'
+import { ACDB_DRAW_CIRCLE_SIDES_DRAFT, log } from '@mlightcad/data-model'
 import { computed, nextTick, ref } from 'vue'
 
 import { AcApQuitCmd } from './commands'
@@ -42,8 +43,14 @@ import FileUpload from './components/FileUpload.vue'
 import { initializeLocale } from './locale'
 import { store } from './store'
 
+// Isolate this example's prefs from cad-simple-viewer-example on localhost.
+AcApSettingManager.configure({
+  storageKey: 'mlightcad.settings.cad-viewer'
+})
+
+initializeLocale()
+
 const initialize = () => {
-  initializeLocale()
   if (import.meta.env.DEV) {
     ;(
       window as Window & { AcApDocManager?: typeof AcApDocManager }
@@ -64,12 +71,16 @@ const initialize = () => {
   )
 }
 
-// Decide whether to show command line vertical toolbar at the right side,
-// performance stats, coordinates in status bar, etc.
-// AcApSettingManager.instance.isShowCommandLine = false
-// AcApSettingManager.instance.isShowToolbar = false
-// AcApSettingManager.instance.isShowStats = false
-// AcApSettingManager.instance.isShowCoordinate = false
+// Host layout overrides (session only — does not write localStorage):
+// AcApSettingManager.instance.apply(
+//   {
+//     isShowCommandLine: false,
+//     isShowToolbar: false,
+//     isShowStats: false,
+//     isShowCoordinate: false
+//   },
+//   { persist: false }
+// )
 
 const BASE_URL = 'https://cdn.jsdelivr.net/gh/mlightcad/cad-data@main/'
 
@@ -82,12 +93,14 @@ const useMainThreadDraw = ref(false)
 const drawNoPlotLayers = ref(false)
 const progressiveRendering = ref(false)
 const openViewMode = ref<AcApOpenViewMode | undefined>(undefined)
+const circleSides = ref(ACDB_DRAW_CIRCLE_SIDES_DRAFT)
 
 const createNewDrawing = async () => {
   const success = await AcApDocManager.instance.newDocument({
     mode: selectedMode.value,
     drawNoPlotLayers: drawNoPlotLayers.value,
     progressiveRendering: progressiveRendering.value,
+    circleSides: circleSides.value,
     ...(openViewMode.value != null ? { openViewMode: openViewMode.value } : {})
   })
   if (!success) {
@@ -108,13 +121,15 @@ const applyOpenOptions = (
   mainThreadDraw: boolean,
   showNoPlotLayers: boolean,
   enableProgressiveRendering: boolean,
-  viewMode: AcApOpenViewMode | undefined
+  viewMode: AcApOpenViewMode | undefined,
+  sides: number
 ) => {
   selectedMode.value = mode
   useMainThreadDraw.value = mainThreadDraw
   drawNoPlotLayers.value = showNoPlotLayers
   progressiveRendering.value = enableProgressiveRendering
   openViewMode.value = viewMode
+  circleSides.value = sides
 }
 
 // Handle file selection from upload component
@@ -124,7 +139,8 @@ const handleFileSelect = (
   mainThreadDraw: boolean,
   showNoPlotLayers: boolean,
   enableProgressiveRendering: boolean,
-  viewMode: AcApOpenViewMode | undefined
+  viewMode: AcApOpenViewMode | undefined,
+  sides: number
 ) => {
   store.isNewDrawing = false
   store.selectedFile = file
@@ -133,7 +149,8 @@ const handleFileSelect = (
     mainThreadDraw,
     showNoPlotLayers,
     enableProgressiveRendering,
-    viewMode
+    viewMode,
+    sides
   )
 }
 
@@ -142,7 +159,8 @@ const handleNewDrawing = (
   mainThreadDraw: boolean,
   showNoPlotLayers: boolean,
   enableProgressiveRendering: boolean,
-  viewMode: AcApOpenViewMode | undefined
+  viewMode: AcApOpenViewMode | undefined,
+  sides: number
 ) => {
   store.selectedFile = null
   store.isNewDrawing = true
@@ -151,7 +169,8 @@ const handleNewDrawing = (
     mainThreadDraw,
     showNoPlotLayers,
     enableProgressiveRendering,
-    viewMode
+    viewMode,
+    sides
   )
 }
 </script>

@@ -1,8 +1,13 @@
-import { AcGeBox2d, type AcGePoint3dLike } from '@mlightcad/data-model'
+import { AcGeBox2d } from '@mlightcad/data-model'
 
 import type { AcEdBaseView } from '../../editor'
 import { acapNotifyUndoStackChanged } from '../../util/AcApDatabaseEdit'
 import type { AcTrView2d } from '../../view'
+import {
+  expandMarkupBoundsByClientRects,
+  isAttachableShapeMarkup,
+  markupGeometryBounds
+} from './AcApMarkupGeometry'
 import {
   getMarkupHistory,
   getSessionUndo,
@@ -15,7 +20,11 @@ import {
   MARKUP_LAYER,
   MARKUP_LIVE_LAYER
 } from './AcApMarkupStore'
-import type { AcApMarkupRecord } from './AcApMarkupTypes'
+import type {
+  AcApMarkupAttachedCallout,
+  AcApMarkupRecord
+} from './AcApMarkupTypes'
+import { patchMarkupStyleWcs, withMarkupStyleWcs } from './AcApMarkupUtil'
 import { createMarkupEntityFromRecord } from './entity'
 
 // Re-export shape builders for commands / jigs that imported them from here.
@@ -218,20 +227,56 @@ export class AcApMarkupPresenter {
     getMarkupStore().setSelectedId(id)
   }
 
-  /** Zoom roughly to a markup's primary world point. */
+  /**
+   * Zoom to the combined world AABB of a markup: shape, leader, and published
+   * HTML overlays (text box / badge / stamp).
+   */
   focus(view: AcEdBaseView, record: AcApMarkupRecord): void {
-    const p = createMarkupEntityFromRecord(record).primaryPoint() as
-      | AcGePoint3dLike
-      | undefined
-    if (!p) return
-    const view2d = asView2d(view)
-    const pad = 50
-    const box = new AcGeBox2d()
-      .expandByPoint({ x: p.x - pad, y: p.y - pad })
-      .expandByPoint({ x: p.x + pad, y: p.y + pad })
-    view2d.zoomTo(box, 1.5)
+    const box = markupFocusExtents(view, record)
+    if (!box) return
+    asView2d(view).zoomTo(box, 1.5)
     this.select(view, record.id)
   }
+}
+
+/**
+ * Combined zoom-to box for a markup: control geometry plus HTML text boxes.
+ *
+ * Grip dots are omitted; they sit on geometry already included in the AABB.
+ *
+ * @param view - View used for overlay lookup and client → world conversion.
+ * @param record - Markup whose shape, leader, and overlays are framed.
+ * @returns World AABB, or `undefined` when the markup has no finite bounds.
+ */
+export function markupFocusExtents(
+  view: AcEdBaseView,
+  record: AcApMarkupRecord
+): AcGeBox2d | undefined {
+  const geometryBox = markupGeometryBounds(record.geometry)
+  const box = geometryBox
+    ? new AcGeBox2d(geometryBox.min, geometryBox.max)
+    : new AcGeBox2d()
+  const group = asView2d(view).htmlTransientManager.getGroup(record.id)
+  if (group) {
+    const rects = []
+    for (const child of group.children) {
+      const el = child.element
+      if (
+        el.classList.contains('ml-html-dot') ||
+        el.classList.contains('ml-html-grip')
+      ) {
+        continue
+      }
+      const rect = el.getBoundingClientRect()
+      if (rect.width <= 0 && rect.height <= 0) continue
+      rects.push(rect)
+    }
+    expandMarkupBoundsByClientRects(box, rects, (clientX, clientY) => {
+      const canvas = view.viewportToCanvas({ x: clientX, y: clientY })
+      return view.screenToWorld(canvas)
+    })
+  }
+  return box.isEmpty() ? undefined : box
 }
 
 /** Shared presenter for the active viewer session. */
@@ -264,9 +309,41 @@ export function commitMarkup(
   record: AcApMarkupRecord
 ): void {
   runMarkupEdit(view, 'Create Markup', () => {
-    getMarkupStore().upsert(record)
-    getMarkupPresenter().publish(view, record)
+    const enriched = {
+      ...record,
+      style: withMarkupStyleWcs(record.style, asView2d(view))
+    }
+    getMarkupStore().upsert(enriched)
+    getMarkupPresenter().publish(view, enriched)
   })
+}
+
+/**
+ * Attach a leader + text box to an existing cloud / rect / circle that has none.
+ *
+ * @returns true when the record was updated.
+ */
+export function attachCalloutToMarkup(
+  view: AcEdBaseView,
+  recordId: string,
+  callout: AcApMarkupAttachedCallout
+): boolean {
+  const store = getMarkupStore()
+  const existing = store.get(recordId)
+  if (!existing || !isAttachableShapeMarkup(existing.geometry)) return false
+  runMarkupEdit(view, 'Attach Callout', () => {
+    const current = store.get(recordId)
+    if (!current || !isAttachableShapeMarkup(current.geometry)) return
+    const updated: AcApMarkupRecord = {
+      ...current,
+      text: callout.text,
+      geometry: { ...current.geometry, callout },
+      updatedAt: new Date().toISOString()
+    }
+    store.upsert(updated)
+    getMarkupPresenter().publish(view, updated)
+  })
+  return true
 }
 
 /**
@@ -274,13 +351,26 @@ export function commitMarkup(
  */
 export function applyMarkupStyleToSelection(
   view: AcEdBaseView,
-  patch: Partial<AcApMarkupRecord['style']>
+  patch: Partial<Pick<AcApMarkupRecord['style'], 'color' | 'fontSize'>>
 ): void {
   const store = getMarkupStore()
   const id = store.selectedId
   if (!id) return
   runMarkupEdit(view, 'Markup Style', () => {
+    const previous = store.get(id)
+    if (!previous) return
     const updated = store.updateStyle(id, patch)
-    if (updated) getMarkupPresenter().publish(view, updated)
+    if (!updated) return
+    const enriched = {
+      ...updated,
+      style: patchMarkupStyleWcs(
+        previous.style,
+        updated.style,
+        asView2d(view),
+        patch
+      )
+    }
+    store.upsert(enriched)
+    getMarkupPresenter().publish(view, enriched)
   })
 }

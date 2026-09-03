@@ -85,7 +85,7 @@ export class AcTrBatchHighlightState {
   /** Color for added entities. */
   compareAddedColor = new THREE.Color(0x22c55e)
   /** Color for modified entities. */
-  compareModifiedColor = new THREE.Color(0xe11d48)
+  compareModifiedColor = new THREE.Color(0xf59e0b)
   /** GPU mask texture uploaded from highlight and compare masks. */
   maskTexture: THREE.DataTexture | null = null
   /** Current width of {@link maskTexture} in pixels. */
@@ -329,6 +329,11 @@ export class AcTrBatchHighlightState {
       )
       this.maskTexture.minFilter = THREE.NearestFilter
       this.maskTexture.magFilter = THREE.NearestFilter
+      this.maskTexture.generateMipmaps = false
+      this.maskTexture.unpackAlignment = 1
+      // Role bytes (0/85/170/255) must not be sRGB-decoded; that would map
+      // added (170) into the deleted shader threshold band.
+      this.maskTexture.colorSpace = THREE.NoColorSpace
       this.maskTexture.needsUpdate = true
       this.maskTextureWidth = width
       this.maskTextureHeight = height

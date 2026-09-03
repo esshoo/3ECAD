@@ -434,6 +434,11 @@ export default {
       text: 'Mesafe',
       description: 'İki nokta arasındaki mesafeyi ölçer'
     },
+    measureContinuous: {
+      text: 'Sürekli',
+      description:
+        'Enter veya İptal edilene kadar ardışık noktalar seçerek zincirleme mesafeleri ölçer'
+    },
     measureAngle: {
       text: 'Açı',
       description: 'Ortak bir köşeyi paylaşan iki çizgi arasındaki açıyı ölçer'
@@ -449,6 +454,10 @@ export default {
     measurePoint: {
       text: 'Nokta',
       description: 'Seçilen noktanın X/Y koordinatlarını ölçer'
+    },
+    measurementPanel: {
+      text: 'Ölçüm paneli',
+      description: 'Ölçüm paletini açar'
     },
     clearMeasurements: {
       text: 'Temizle',
@@ -476,7 +485,7 @@ export default {
         'Görüntüleme yönünü veya büyütmeyi değiştirmeden görünümü kaydırır'
     },
     markupPanel: {
-      text: 'İnceleme',
+      text: 'İşaret paneli',
       description: 'İşaret paletini açar'
     },
     markupText: {
@@ -499,6 +508,10 @@ export default {
       text: 'Ok',
       description: 'Ok işareti oluşturur'
     },
+    markupLine: {
+      text: 'Çizgi',
+      description: 'Çizgi işareti oluşturur'
+    },
     markupCallout: {
       text: 'Çağrı',
       description: 'Çağrı notu oluşturur'
@@ -519,10 +532,6 @@ export default {
       text: 'Renk',
       description: 'Yeni işaret çizimleri için rengi ayarlar'
     },
-    markupLineWeight: {
-      text: 'Çizgi Kalınlığı',
-      description: 'Yeni işaret çizimleri için çizgi kalınlığını ayarlar'
-    },
     markupFontSize: {
       text: 'Yazı Boyutu',
       description: 'Metin ve çağrı işaretleri için yazı boyutunu ayarlar'
@@ -530,11 +539,6 @@ export default {
     measurementColor: {
       text: 'Renk',
       description: 'Seçili ölçümün veya sonraki ölçümlerin rengini ayarlar'
-    },
-    measurementLineWeight: {
-      text: 'Çizgi Kalınlığı',
-      description:
-        'Seçili ölçümün veya sonraki ölçümlerin çizgi kalınlığını ayarlar'
     },
     measurementFontSize: {
       text: 'Yazı Boyutu',
@@ -586,7 +590,6 @@ export default {
       commandLine: 'Komut Satırı',
       coordinate: 'Koordinat',
       entityInfo: 'Varlık Bilgisi',
-      fileName: 'Dosya Adı',
       languageSelector: 'Dil Seçici',
       ribbon: 'Şerit',
       toolbar: 'Araç Çubuğu',
@@ -642,7 +645,6 @@ export default {
     moreLayouts: 'Diğer düzenler'
   },
   toolPalette: {
-    moreTabs: 'Diğer sekmeler',
     entityProperties: {
       tab: 'Özellikler',
       title: 'Varlık Özellikleri',
@@ -749,6 +751,23 @@ export default {
         question: 'Soru',
         answered: 'Yanıtlandı',
         closed: 'Kapalı'
+      }
+    },
+    measurements: {
+      tab: 'Ölçüm',
+      title: 'Ölçümler',
+      empty: 'Henüz ölçüm yok',
+      type: 'Tür',
+      value: 'Değer',
+      filterAll: 'Tümü',
+      delete: 'Sil',
+      clear: 'Tümünü temizle',
+      typeValues: {
+        distance: 'Mesafe',
+        angle: 'Açı',
+        area: 'Alan',
+        arc: 'Yay',
+        point: 'XY'
       }
     },
     missingResources: {

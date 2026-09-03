@@ -90,7 +90,8 @@ import {
   AcEdOpenMode,
   eventBus
 } from '@mlightcad/cad-simple-viewer'
-import { log } from '@mlightcad/data-model'
+import { ACDB_DRAW_CIRCLE_SIDES_DRAFT, log } from '@mlightcad/data-model'
+import { provideLocale } from '@mlightcad/ui-components'
 import { ElConfigProvider, ElMessage } from 'element-plus'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -103,7 +104,6 @@ import {
   setColorTheme,
   toggleDark,
   useDocument,
-  useDrawStyleToolbarVisible,
   useLocale,
   useNotificationCenter,
   useSettings
@@ -182,6 +182,13 @@ interface Props {
    * Write uses {@link AcApOpenViewMode.Saved}.
    */
   openViewMode?: AcApOpenViewMode
+  /**
+   * Maximum segments used to tessellate a full circle when drawing.
+   * Lower values save memory; higher values look smoother.
+   * When omitted, {@link ACDB_DRAW_CIRCLE_SIDES_DRAFT} (50) is used,
+   * matching the data-model default for {@link AcApOpenDatabaseOptions.circleSides}.
+   */
+  circleSides?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -195,7 +202,8 @@ const props = withDefaults(defineProps<Props>(), {
   theme: 'dark',
   mode: AcEdOpenMode.Write,
   progressiveRendering: false,
-  openViewMode: undefined
+  openViewMode: undefined,
+  circleSides: ACDB_DRAW_CIRCLE_SIDES_DRAFT
 })
 
 const buildOpenOptions = (): AcApOpenDatabaseOptions => ({
@@ -203,11 +211,15 @@ const buildOpenOptions = (): AcApOpenDatabaseOptions => ({
   mode: props.mode,
   drawNoPlotLayers: props.drawNoPlotLayers,
   progressiveRendering: props.progressiveRendering,
+  circleSides: props.circleSides,
   ...(props.openViewMode != null ? { openViewMode: props.openViewMode } : {})
 })
 
 const { t } = useI18n()
-const { effectiveLocale, elementPlusLocale } = useLocale(props.locale)
+const { currentLocale, effectiveLocale, elementPlusLocale } = useLocale(
+  props.locale
+)
+provideLocale(currentLocale)
 const {
   info,
   warning,
@@ -258,13 +270,11 @@ const viewerThemeClass = computed(() =>
 )
 
 const features = useSettings()
-const drawStyleToolbarVisible = useDrawStyleToolbarVisible()
 const {
   beginDocumentOpening,
   endDocumentOpening,
   isDocumentOpening,
-  openMode: docOpenMode,
-  displayName
+  openMode: docOpenMode
 } = useDocument()
 const pendingOpenMode = ref<AcEdOpenMode>()
 const effectiveOpenMode = computed(
@@ -434,7 +444,8 @@ watch(
     props.mode,
     props.drawNoPlotLayers,
     props.progressiveRendering,
-    props.openViewMode
+    props.openViewMode,
+    props.circleSides
   ],
   () => {
     if (editorRef.value) {
@@ -512,7 +523,12 @@ onUnmounted(() => {
 })
 
 watch(
-  [editorRef, isWriteMode, () => features.isShowRibbon, () => features.isShowToolbar],
+  [
+    editorRef,
+    isWriteMode,
+    () => features.isShowRibbon,
+    () => features.isShowToolbar
+  ],
   async () => {
     await nextTick()
     bindHeaderObserver()
@@ -671,19 +687,6 @@ const closeNotificationCenter = () => {
             class="ml-cad-container"
           ></div>
 
-          <!-- Display current filename at the top center -->
-          <div
-            v-if="
-              editorRef &&
-              !features.isShowRibbon &&
-              features.isShowFileName &&
-              !drawStyleToolbarVisible
-            "
-            class="ml-file-name"
-          >
-            {{ displayName }}
-          </div>
-
           <!-- Toolbar with common CAD operations (zoom, pan, select, etc.) -->
           <ml-tool-bars v-if="editorRef" />
 
@@ -777,15 +780,11 @@ const closeNotificationCenter = () => {
   z-index: 6;
 }
 
-/* Position the filename display at the top center of the viewer */
-.ml-file-name {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  color: var(--el-text-color-regular);
-  transform: translateX(-50%);
-  text-align: center;
-  pointer-events: none; /* Allow mouse events to pass through to container */
-  z-index: 3; /* Ensure it's above canvas but doesn't block events */
+/* Mobile command chrome is position:fixed over the canvas; hide the
+   status-bar footer so ✓ / × receive taps instead of the footer. */
+.ml-cad-layout:has(.ml-mobile-cmd-active) .ml-cad-footer {
+  visibility: hidden;
+  pointer-events: none;
 }
+
 </style>

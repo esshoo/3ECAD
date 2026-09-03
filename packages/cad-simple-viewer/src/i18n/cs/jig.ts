@@ -673,6 +673,10 @@ export default {
     firstPoint: 'Zadejte první bod',
     secondPoint: 'Zadejte druhý bod'
   },
+  measureContinuous: {
+    firstPoint: 'Zadejte první bod',
+    nextPoint: 'Zadejte další bod (nebo stiskněte Enter pro dokončení)'
+  },
   measurePoint: {
     point: 'Zadejte bod'
   },
@@ -729,7 +733,7 @@ export default {
       secondCorner: 'Zadejte protilehlý roh zvýraznění'
     },
     callout: {
-      tip: 'Zadejte hrot odkazu (konec šipky)',
+      tip: 'Zadejte hrot vodítka, nebo obrys obláčku/obdélníku/kružnice bez odkazu',
       anchor: 'Zadejte umístění textu odkazu',
       content: 'Zadejte text odkazu'
     },
@@ -1190,6 +1194,11 @@ export default {
         display: 'Předchozí(P)',
         local: 'Předchozí',
         global: 'Previous'
+      },
+      original: {
+        display: 'Původní(O)',
+        local: 'Původní',
+        global: 'Original'
       },
       scale: {
         display: 'Měřítko(S)',

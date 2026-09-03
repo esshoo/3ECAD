@@ -105,7 +105,7 @@ function createHighlightUniforms(): AcTrBatchHighlightUniforms {
     u_compareBaseColor: { value: new THREE.Color(0x9ca3af) },
     u_compareDeletedColor: { value: new THREE.Color(0xe11d48) },
     u_compareAddedColor: { value: new THREE.Color(0x22c55e) },
-    u_compareModifiedColor: { value: new THREE.Color(0xe11d48) }
+    u_compareModifiedColor: { value: new THREE.Color(0xf59e0b) }
   }
 }
 
@@ -437,7 +437,19 @@ export function installBatchHighlightRenderer(
     material,
     group
   ) => {
-    previousOnBeforeRender?.(renderer, scene, camera, geometry, material, group)
+    // Preserve `this` binding: `object.onBeforeRender` may be inherited from
+    // the prototype (e.g. `LineSegments2`), so a bare call would lose the
+    // receiver and `this.material` inside the previous handler would be
+    // undefined.
+    previousOnBeforeRender?.call(
+      object,
+      renderer,
+      scene,
+      camera,
+      geometry,
+      material,
+      group
+    )
     if (
       (!state.hasAnyHighlight() && !state.needsCompareUniforms()) ||
       !material

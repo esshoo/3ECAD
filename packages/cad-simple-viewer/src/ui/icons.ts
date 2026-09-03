@@ -43,63 +43,123 @@ export const ICON_LAYER =
 export const ICON_LAYOUT =
   '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><rect x="2" y="2" width="8.2" height="5" rx="1.2" fill="currentColor"/><rect x="2" y="8.5" width="8.2" height="9.5" rx="1.2" fill="currentColor"/><rect x="11.7" y="2" width="6.3" height="10" rx="1.2" fill="currentColor"/><rect x="11.7" y="13.5" width="6.3" height="4.5" rx="1.2" fill="currentColor"/></svg>'
 
-/** Measure tools parent menu icon (copied from cad-viewer `measure.svg`). */
+/** Measure tools parent menu icon. */
 export const ICON_MEASURE =
   '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="currentColor" fill-rule="evenodd" d="M1.5 7h17v6h-17ZM4.25 7h1v2.5h-1ZM7.5 7h.75v1.5H7.5ZM10.25 7h1v2.5h-1ZM13.5 7h.75v1.5H13.5ZM16.25 7h1v2.5h-1Z"/></svg>'
 
-/** Measure distance icon (copied from cad-viewer `measureDistance.svg`). */
-export const ICON_MEASURE_DISTANCE =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="currentColor" d="M3.75 9.25h12.5v1.5H3.75v-1.5ZM2.25 6.5h1.5v7h-1.5v-7ZM16.25 6.5h1.5v7h-1.5v-7Z"/></svg>'
+/**
+ * Shared ruler strip under each measure-tool glyph.
+ * Tick marks are evenodd cutouts so they stay visible on light and dark toolbars.
+ */
+const MEASURE_ICON_RULER =
+  '<path fill="currentColor" fill-rule="evenodd" d="M2.25 15h15.5v3.4H2.25Zm1.5 0h.7v1.45h-.7Zm2.95 0h.7v1.45h-.7Zm2.95 0h.7v1.45h-.7Zm2.95 0h.7v1.45h-.7Zm2.95 0h.7v1.45h-.7Z"/>'
 
-/** Measure angle icon (copied from cad-viewer `measureAngle.svg`). */
-export const ICON_MEASURE_ANGLE =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><polygon fill="currentColor" points="5.74 7.13 7 9.5 4.15 7.72 3.2 7.12 3 7 7 4.5 6.17 6.05 5.67 7 5.74 7.13"/><polygon fill="currentColor" points="16 12.5 13.5 16.5 12.66 15.15 11.92 13.97 11 12.5 12 13.03 12.98 13.55 13.5 13.83 16 12.5"/><rect fill="currentColor" x="2" y="2.5" width="1" height="15"/><rect fill="currentColor" x="3" y="16.5" width="15" height="1"/><path fill="currentColor" d="M14,13c0,.18,0,.37,0,.55v0a6.82,6.82,0,0,1-.32,1.57l-.74-1.18L13,13.5c0-.14,0-.31,0-.47v0a6,6,0,0,0-6-6,6.74,6.74,0,0,0-1.26.13l-.29.07a5.61,5.61,0,0,0-1.3.52l-1-.6a7.07,7.07,0,0,1,2-.88,6.78,6.78,0,0,1,1-.19A7.7,7.7,0,0,1,7,6a7,7,0,0,1,7,7Z"/></svg>'
+/**
+ * Accent for measure/markup grips and highlighted glyph parts.
+ *
+ * `--el-color-primary` is set by Element Plus in cad-viewer. cad-simple-viewer
+ * maps it through `--ml-ui-accent`. Exported HTML aliases both to `--mlcad-accent`.
+ */
+const TOOL_ICON_ACCENT =
+  'var(--el-color-primary, var(--ml-ui-accent, #409eff))'
 
-/** Measure area icon (copied from cad-viewer `measureArea.svg`). */
-export const ICON_MEASURE_AREA =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="currentColor" fill-rule="evenodd" d="M4 4h12v12H4V4Zm1.5 1.5v9h9v-9h-9Z"/><circle fill="currentColor" cx="4" cy="4" r="1.5"/><circle fill="currentColor" cx="16" cy="4" r="1.5"/><circle fill="currentColor" cx="4" cy="16" r="1.5"/><circle fill="currentColor" cx="16" cy="16" r="1.5"/></svg>'
+/** Composes a measure-tool icon: unique glyph on top, shared ruler on the bottom. */
+function measureToolIcon(glyph: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20">${glyph}${MEASURE_ICON_RULER}</svg>`
+}
 
-/** Measure arc length icon (copied from cad-viewer `measureArc.svg`). */
-export const ICON_MEASURE_ARC =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="currentColor" d="M2 16A10 10 0 0 0 18 16h-1.5A8.5 8.5 0 0 1 3.5 16H2Z"/><circle fill="currentColor" cx="2" cy="16" r="1.5"/><circle fill="currentColor" cx="10" cy="12.2" r="1.5"/><circle fill="currentColor" cx="18" cy="16" r="1.5"/></svg>'
+/** Measure distance icon (dimension arrows over a ruler). */
+export const ICON_MEASURE_DISTANCE = measureToolIcon(
+  `<rect fill="${TOOL_ICON_ACCENT}" x="2.9" y="2.5" width="1.25" height="8.8" rx=".2"/><rect fill="${TOOL_ICON_ACCENT}" x="15.85" y="2.5" width="1.25" height="8.8" rx=".2"/><path fill="${TOOL_ICON_ACCENT}" d="M4.4 6.9 7.2 5.05v3.7Z"/><path fill="${TOOL_ICON_ACCENT}" d="M15.6 6.9 12.8 5.05v3.7Z"/><rect fill="${TOOL_ICON_ACCENT}" x="6.7" y="6.25" width="6.6" height="1.3"/>`
+)
 
-/** Measure point / coordinates icon (copied from cad-viewer `measurePoint.svg`). */
-export const ICON_MEASURE_POINT =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="currentColor" d="M9.25 2h1.5v5.25H16v1.5h-5.25V16h-1.5v-7.25H4v-1.5h5.25V2Z"/><circle fill="currentColor" cx="10" cy="10" r="1.75"/></svg>'
+/** Continuous distance icon (distance glyph with an "n" badge for n segments). */
+export const ICON_MEASURE_CONTINUOUS = measureToolIcon(
+  `<rect fill="${TOOL_ICON_ACCENT}" x="2.9" y="2.5" width="1.25" height="8.8" rx=".2"/><rect fill="${TOOL_ICON_ACCENT}" x="15.85" y="2.5" width="1.25" height="8.8" rx=".2"/><path fill="${TOOL_ICON_ACCENT}" d="M4.4 6.9 7.2 5.05v3.7Z"/><path fill="${TOOL_ICON_ACCENT}" d="M15.6 6.9 12.8 5.05v3.7Z"/><rect fill="${TOOL_ICON_ACCENT}" x="6.7" y="6.25" width="6.6" height="1.3"/><circle fill="currentColor" cx="10" cy="3.45" r="2.2"/><text x="10" y="4.42" text-anchor="middle" font-size="3.15" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="${TOOL_ICON_ACCENT}">n</text>`
+)
 
-/** Clear measurements icon (copied from cad-viewer `clearMeasurements.svg`). */
-export const ICON_CLEAR_MEASUREMENTS =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>'
+/** Measure angle icon (two rays and a dimension arc over a ruler). */
+export const ICON_MEASURE_ANGLE = measureToolIcon(
+  `<g fill="none" stroke="${TOOL_ICON_ACCENT}" stroke-linejoin="miter"><path stroke-width="1.55" stroke-linecap="butt" d="M16.9 12.25H4.9L11.6 3.03"/><path stroke-width="1.7" stroke-linecap="butt" d="M11.05 12.25A6.15 6.15 0 0 0 8.51 7.27"/></g><path fill="${TOOL_ICON_ACCENT}" d="M11.05 12.25 9.85 10.55h2.4Z"/><path fill="${TOOL_ICON_ACCENT}" d="M8.51 7.27 10.46 7.39 9.23 9.09Z"/>`
+)
+
+/** Measure area icon (filled quarter-circle sector over a ruler). */
+export const ICON_MEASURE_AREA = measureToolIcon(
+  `<path fill="${TOOL_ICON_ACCENT}" d="M5 12V4.2A7.8 7.8 0 0 1 12.8 12Z"/>`
+)
+
+/** Measure arc length icon (quarter-arc with grips and a right-angle vertex over a ruler). */
+export const ICON_MEASURE_ARC = measureToolIcon(
+  `<g fill="none" stroke-linejoin="miter"><path stroke="currentColor" stroke-width="1.5" stroke-linecap="butt" d="M4.9 11.6A8.3 8.3 0 0 1 13.2 3.3"/><path stroke="currentColor" stroke-width="1.35" stroke-linecap="square" d="M10.4 11.6H13.2V8.8"/><path stroke="currentColor" stroke-width="1.35" stroke-linecap="butt" d="M13.2 11.6v1.7"/><rect stroke="${TOOL_ICON_ACCENT}" stroke-width="1.15" x="3.65" y="10.35" width="2.5" height="2.5"/><rect stroke="${TOOL_ICON_ACCENT}" stroke-width="1.15" x="11.95" y="2.05" width="2.5" height="2.5"/></g>`
+)
+
+/** Measure point / coordinates icon (axes, dashed projections, and a point over a ruler). */
+export const ICON_MEASURE_POINT = measureToolIcon(
+  `<g fill="none" stroke="${TOOL_ICON_ACCENT}" stroke-linecap="round" stroke-linejoin="round"><path stroke-width="1.4" d="M4 4.8v7.4h7.6"/><path stroke-width="1.2" stroke-dasharray="1.7 1.2" d="M4 6.9h7M11 12.2V6.9"/></g><path fill="${TOOL_ICON_ACCENT}" d="M4 2.5 2.45 4.8h3.1ZM13.8 12.2 11.5 10.7v3Z"/><circle fill="${TOOL_ICON_ACCENT}" cx="11" cy="6.9" r="1.3"/>`
+)
+
+/**
+ * Clear / sweep icon (Noun Project "clear" 5576267 by Alzam).
+ * https://thenounproject.com/icon/clear-5576267/
+ */
+export const ICON_CLEAR =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M 459.5 0 L 475.5 0 L 476.5 1 L 479.5 1 L 485.5 3 Q 487.8 6.2 492.5 7 L 501 14.5 L 505 19.5 L 511 32.5 Q 510.2 35.8 512 36.5 L 512 52.5 L 511 53.5 L 511 56.5 L 509 62.5 L 506 68.5 L 493 89.5 L 483 108.5 L 478 115.5 L 472 127.5 L 467 134.5 L 457 153.5 L 452 160.5 L 442 179.5 L 437 186.5 L 431 198.5 L 440 213.5 L 440 215.5 L 443 220.5 L 447 232.5 L 448 240.5 L 449 241.5 L 449 245.5 L 450 246.5 L 450 254.5 L 451 255.5 L 451 274.5 L 450 275.5 L 450 283.5 L 449 284.5 L 449 289.5 L 448 290.5 L 448 294.5 L 447 295.5 L 446 302.5 L 442 314.5 L 438 322.5 L 438 324.5 L 428 345.5 L 428 347.5 L 425 352.5 L 422 361.5 L 418 368.5 L 418 370.5 L 415 375.5 L 412 384.5 L 408 391.5 L 408 393.5 L 405 398.5 L 402 407.5 L 398 414.5 L 395 423.5 L 391 430.5 L 391 432.5 L 381 453.5 L 381 455.5 L 378 460.5 L 375 469.5 L 371 476.5 L 368 485.5 L 361.5 497 L 353.5 501 L 348.5 501 L 347.5 500 L 344.5 500 L 329.5 495 L 326.5 493 L 321.5 492 L 318.5 490 L 303.5 485 L 289.5 478 L 287.5 478 L 282 473.5 L 279 467.5 L 279 459.5 L 280 458.5 L 280 455.5 L 281 454.5 L 281 451.5 L 282 450.5 L 283 442.5 L 284 441.5 L 286 431.5 L 285.5 431 L 281.5 435 L 259.5 455 L 255.5 457 L 246.5 457 L 223.5 444 L 189.5 421 L 155.5 394 L 133 373.5 L 130 367.5 L 130 359.5 L 134 352.5 L 223 233.5 L 242 206.5 L 254.5 192 L 271.5 177 L 285.5 168 L 299.5 161 L 314.5 156 L 317.5 156 L 318.5 155 L 330.5 154 L 331.5 153 L 352.5 153 L 354 151.5 L 356 146.5 L 372 120.5 L 374 115.5 L 387 94.5 L 397 75.5 L 402 68.5 L 408 56.5 L 413 49.5 L 423 30.5 L 431 17.5 L 439.5 9 L 449.5 3 L 455.5 1 L 458.5 1 L 459.5 0 Z M 466 30 L 459 33 L 454 39 L 448 51 L 443 58 L 433 77 L 428 84 L 414 110 L 409 117 L 407 122 L 405 124 L 403 129 L 401 131 L 399 136 L 384 161 L 386 162 L 388 162 L 396 166 L 409 175 L 422 153 L 424 148 L 429 141 L 431 136 L 433 134 L 435 129 L 437 127 L 439 122 L 444 115 L 454 96 L 459 89 L 469 70 L 474 63 L 482 47 L 482 43 L 480 38 L 475 32 L 469 30 L 466 30 Z M 333 183 L 332 184 L 328 184 L 327 185 L 324 185 L 323 186 L 320 186 L 314 188 L 300 195 L 286 205 L 271 220 L 267 225 L 266 228 L 410 310 L 412 307 L 412 305 L 416 296 L 418 285 L 419 284 L 419 279 L 420 278 L 420 252 L 419 251 L 419 246 L 417 241 L 417 238 L 411 224 L 402 211 L 389 198 L 371 188 L 362 185 L 352 184 L 351 183 L 333 183 Z M 248 252 L 195 322 L 193 326 L 172 353 L 167 361 L 194 384 L 228 409 L 249 422 L 256 417 L 303 372 L 310 368 L 318 368 L 322 370 L 328 378 Q 327 381 329 382 L 329 386 L 326 395 L 326 399 L 323 408 L 323 411 L 322 412 L 322 416 L 319 425 L 319 428 L 318 429 L 318 432 L 317 433 L 317 437 L 314 446 L 314 449 L 313 450 L 313 453 L 312 454 L 316 456 L 318 456 L 331 462 L 343 466 L 351 448 L 351 446 L 354 441 L 354 439 L 357 434 L 357 432 L 364 418 L 364 416 L 367 411 L 367 409 L 370 404 L 370 402 L 377 388 L 377 386 L 380 381 L 380 379 L 383 374 L 383 372 L 387 365 L 390 356 L 393 351 L 393 349 L 396 344 L 397 339 L 375 326 L 373 324 L 368 322 L 366 320 L 361 318 L 354 313 L 349 311 L 347 309 L 342 307 L 340 305 L 335 303 L 321 294 L 316 292 L 314 290 L 309 288 L 307 286 L 302 284 L 295 279 L 276 269 L 248 252 Z "/><path d="M 170.5 100 L 179.5 100 Q 185 102 188 106.5 L 190 110.5 L 190 134.5 L 184.5 142 L 177.5 145 L 171.5 145 L 166.5 143 L 162 138.5 L 159 129.5 L 159 115.5 L 160 114.5 Q 159.2 109.7 161 107.5 L 166.5 102 L 170.5 100 Z "/><path d="M 131.5 140 L 151.5 140 L 156.5 142 L 162 147.5 L 164 151.5 L 164 159.5 L 163 162.5 L 158.5 168 L 152.5 171 L 130.5 171 L 124.5 168 L 122 165.5 L 119 159.5 L 119 151.5 Q 121.3 145.3 126.5 142 L 131.5 140 Z "/><path d="M 197.5 140 L 218.5 140 L 223.5 142 L 228 146.5 L 231 152.5 L 231 158.5 L 229 163.5 L 223.5 169 L 218.5 171 L 197.5 171 L 192.5 169 L 188 164.5 L 186 160.5 L 185 153.5 L 188 146.5 L 191.5 143 L 197.5 140 Z "/><path d="M 171.5 166 L 177.5 166 L 180.5 167 L 187 171.5 L 190 176.5 L 190 200.5 Q 188 206 183.5 209 L 179.5 211 L 173.5 212 L 167.5 210 L 161 203.5 Q 159.2 201.3 160 196.5 L 159 195.5 L 159 181.5 L 162 172.5 L 165.5 169 L 171.5 166 Z "/><path d="M 50.5 223 L 60.5 223 L 68 228.5 L 71 234.5 L 71 256.5 Q 69.1 262.6 64.5 266 L 59.5 268 L 51.5 268 Q 45.3 265.7 42 260.5 L 40 255.5 L 40 235.5 L 42 230.5 L 48.5 224 L 50.5 223 Z "/><path d="M 13.5 263 L 30.5 263 Q 31.5 265 35.5 264 L 43 270.5 L 45 274.5 L 45 282.5 Q 43.1 288.6 38.5 292 L 33.5 294 L 10.5 294 Q 5 292 2 287.5 L 0 283.5 L 0 274.5 Q 2.3 268.3 7.5 265 L 13.5 263 Z "/><path d="M 80.5 263 L 97.5 263 L 103.5 265 L 108 268.5 L 111 273.5 L 112 279.5 L 109 287.5 L 104.5 292 L 100.5 294 L 77.5 294 Q 71.3 291.7 68 286.5 L 66 281.5 L 66 276.5 L 69 269.5 L 72.5 266 L 80.5 263 Z "/><path d="M 54.5 289 L 61.5 290 L 69 296.5 L 71 301.5 L 71 322.5 L 69 327.5 L 63.5 333 L 58.5 335 L 53.5 335 L 46.5 332 L 43 328.5 L 40 321.5 L 40 302.5 Q 41.8 301.8 41 298.5 L 46.5 292 L 54.5 289 Z "/><path d="M 98.5 400 L 107.5 402 L 113 407.5 L 115 411.5 L 115 434.5 Q 112.7 440.7 107.5 444 L 101.5 446 L 96.5 446 L 90.5 443 L 87 439.5 L 84 430.5 L 84 415.5 L 85 414.5 Q 84.3 410.3 86 408.5 L 92.5 402 L 98.5 400 Z "/><path d="M 55.5 441 L 77.5 441 L 80.5 442 L 86 446.5 L 89 451.5 L 89 460.5 Q 86.7 466.7 81.5 470 L 76.5 472 L 56.5 472 L 51.5 470 L 46 464.5 L 44 460.5 L 44 452.5 L 45 449.5 L 49.5 444 L 55.5 441 Z "/><path d="M 121.5 441 L 144.5 441 Q 150.7 443.3 154 448.5 L 156 453.5 L 156 458.5 L 154 464.5 L 148.5 470 L 146.5 470 L 143.5 472 L 122.5 472 L 116.5 469 L 113 465.5 L 111 461.5 L 110 455.5 Q 112 454.5 111 450.5 L 117.5 443 L 121.5 441 Z "/><path d="M 96.5 467 L 103.5 467 L 106.5 468 L 113 473.5 L 115 478.5 L 115 501.5 Q 113 507 108.5 510 L 104.5 512 L 95.5 512 Q 89.3 509.7 86 504.5 Q 84.3 502.7 85 498.5 L 84 497.5 L 84 482.5 L 87 473.5 L 91.5 469 L 96.5 467 Z "/></svg>'
+
+/** Clear measurements toolbar icon. */
+export const ICON_CLEAR_MEASUREMENTS = ICON_CLEAR
 
 /** Switch background icon. */
 export const ICON_SWITCH_BG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" fill="currentColor"/><rect x="14" y="14" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M12 4a8 8 0 0 1 7.25 7.25" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/><path d="M20.75 10 L17.25 10 L19 12.5 Z" fill="currentColor"/><path d="M12 20a8 8 0 0 1-8-8" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/><path d="M6 14 L2.5 14 L4 11 Z" fill="currentColor"/></svg>'
 
+/** Reading mode icon (black linework on white page; explicit #000/#fff for toolbar contrast). */
+export const ICON_READING_MODE =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><rect x="2.5" y="2.5" width="15" height="15" rx="1.5" fill="#fff" stroke="currentColor" stroke-width="1.2"/><g fill="none" stroke="#000" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 6.5h4.5M5.5 10h7M5.5 13.5h9"/><path d="M13.25 6.5v4.25h-3.25"/></g></svg>'
+
 /** Review tools parent icon (pencil on a rounded square). */
 export const ICON_ANNOTATION =
   '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20" fill="none" style="fill:none"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.4 3.25H5.5A2.25 2.25 0 0 0 3.25 5.5v9A2.25 2.25 0 0 0 5.5 16.75h9A2.25 2.25 0 0 0 16.75 14.5V8.6"/><g transform="rotate(45 13.2 6.7)"><rect x="11.7" y="1.55" width="3" height="7.45" rx="1.45"/><path d="M11.7 3.2h3"/><path d="M11.7 9 13.2 12.15 14.7 9"/><rect x="12.8" y="7.05" width="0.8" height="1.2" rx="0.4"/></g></g></svg>'
 
-/** Markup / revision cloud icon (copied from cad-viewer `revCloud.svg`). */
-export const ICON_REV_CLOUD =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 40 40"><path d="M35.29108325386048,15C37.125226253860475,12.309847399999999,36.958467253860476,9.335468299999999,34.79083925386047,7.0296237C32.62321825386047,4.53162557,29.455148253860475,4.33947164,27.120786253860473,6.4531626C24.953160253860474,4.53162512,21.951835253860473,4.53162512,19.950952253860475,6.4531626C17.783325253860475,4.53162512,14.782001253860473,4.53162512,12.781115753860474,6.4531626C10.446751353860474,4.3394711,7.111944153860474,4.53162512,4.944319853860474,7.0296228C2.9434360238604738,9.335468299999999,2.7767065138604736,12.3098459,4.610849853860474,15C2.9434466638604735,17.497998000000003,2.9434466638604735,22.694155,4.610849853860474,25C2.7767063338604734,27.690151,2.9434360238604738,30.664532,5.111060153860474,32.970377C7.278683453860474,35.468374,10.446751353860474,35.660526000000004,12.781114853860474,33.546839C14.013456253860474,34.639273,15.515264253860474,35.110636,16.949504253860475,34.960924L17.384031253860474,33.278093Q15.695761253860473,33.903341,13.886703253860473,32.299662C13.250737453860474,31.735897,12.292436853860474,31.740944,11.662447253860474,32.311378000000005Q10.430524553860474,33.426844,9.001459353860474,33.325500000000005Q7.535682953860474,33.22155,6.369870153860473,31.878052C6.355376453860474,31.861349,6.3405518538604735,31.844936,6.325405153860474,31.828825Q3.8021785638604735,29.144703,5.9879074538604735,25.938877C6.383556653860474,25.358576,6.372957753860474,24.592518,5.961405753860474,24.023384Q5.026963953860474,22.731148,5.026963953860474,20.072058Q5.026963953860474,17.378647,5.997069853860474,15.925296C6.374311253860474,15.360136,6.3706860538604735,14.6225471,5.987907653860473,14.0611229Q3.8149851238604735,10.8740788,6.203129753860473,8.1219487Q7.366510153860474,6.7812542,8.914587753860474,6.6747454Q10.427746053860474,6.570639,11.662447253860474,7.6886220000000005C12.311335753860474,8.2761691,13.304180353860474,8.261601,13.935551253860474,7.655268899999999Q16.267856253860472,5.41545445,18.845364253860474,7.700341C19.495353253860472,8.2765367,20.478888253860475,8.2569213,21.105388253860475,7.6552677Q23.437688253860475,5.41545364,26.015201253860475,7.7003412C26.651166253860474,8.2641058,27.609466253860475,8.2590561,28.239455253860474,7.6886208Q29.471375253860472,6.5731552,30.900443253860473,6.6745013Q32.36622125386047,6.7784510000000004,33.532031253860474,8.1219487C33.546527253860475,8.1386516,33.56135125386047,8.1550651,33.576497253860474,8.1711793Q36.099740253860475,10.8553152,33.91402525386047,14.0611248C33.75512825386048,14.2941837,33.65797725386047,14.5637598,33.631677253860474,14.8446045Q33.79909825386048,14.8235569,33.975852253860474,14.8257475Q34.933356253860474,14.8375826,35.59989625386047,15.52399L35.66519325386047,15.591235C35.550366253860474,15.381103,35.425664253860475,15.183288,35.29108325386048,15ZM35.966336253860476,26.182783L34.676930253860476,27.463251Q35.393826253860475,29.732494,33.53202725386048,31.878052C33.517697253860476,31.894566,33.50369225386048,31.911364,33.490022253860474,31.928431Q32.454415253860475,33.221331,30.964744253860474,33.325373Q30.004237253860474,33.392458000000005,29.149894253860474,32.951971L27.929481253860473,34.163925C30.176993253860473,35.589745,33.01140925386048,35.191897999999995,34.790837253860474,32.970377C36.64204925386047,30.837021,37.033868253860476,28.496355,35.966336253860476,26.182783Z" fill="currentColor"></path><path d="M18.34860205776758,36.08124306176758L19.51047686176758,31.58106006176758C19.601237461767578,31.22952606176758,20.042625161767578,31.109528061767577,20.301013961767577,31.36614306176758L23.55426316176758,34.59704206176758C23.808096861767577,34.84913206176758,23.69668006176758,35.27922206176758,23.35186196176758,35.378357061767574L18.936737541767577,36.647640061767575C18.586058351767576,36.74845306176758,18.257926098767577,36.43245106176758,18.34860205776758,36.08124306176758ZM21.15253496176758,30.02545706176758L24.88609836176758,33.73337206176758C25.07032536176758,33.91633406176758,25.36901856176758,33.91633406176758,25.553247461767576,33.73337206176758L36.52849006176758,22.833516161767577C36.710360061767574,22.65290166176758,36.71303206176758,22.36089566176758,36.534500061767574,22.17702746176758L32.941582061767576,18.47663122176758C32.75926806176758,18.288860715767576,32.45763906176758,18.28513235576758,32.27067206176758,18.46833832176758L21.15478106176758,29.36067706176758C20.96843986176758,29.543269061767578,20.96743176176758,29.84162706176758,21.15253496176758,30.02545706176758Z" fill="currentColor"></path></svg>'
+/**
+ * Shared callout-corner base under each markup-tool glyph
+ * (L-stroke with a speech-bubble notch).
+ */
+const MARKUP_ICON_BASE =
+  '<path fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="butt" stroke-linejoin="miter" d="M2.6 6.8v8.5h5.2l2.2 2.4 2.2-2.4h5.2"/>'
 
-/** Markup rectangle icon (copied from cad-viewer `revRect.svg`). */
-export const ICON_REV_RECT =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path d="M1.666717529296875,15.833333L1.666717529296875,4.1666666C1.666717529296875,3.24619204,2.412909569296875,2.5,3.333384129296875,2.5L16.666717529296875,2.5C17.587192529296875,2.5,18.333383529296874,3.24619204,18.333383529296874,4.1666666L18.333383529296874,9.127090500000001L17.500050529296875,8.268899000000001L17.500050529296875,4.1666666Q17.500050529296875,3.33333331,16.666717529296875,3.33333331L3.333384129296875,3.33333331Q2.500050839296875,3.33333331,2.500050839296875,4.1666666L2.500050839296875,15.833333Q2.500050839296875,16.666666,3.333384129296875,16.666666L8.404951129296876,16.666666L8.189774029296874,17.5L3.333384129296875,17.5C2.412909569296875,17.5,1.666717529296875,16.753808,1.666717529296875,15.833333ZM13.575839529296875,17.5L16.666717529296875,17.5C17.587192529296875,17.5,18.333383529296874,16.753808,18.333383529296874,15.833333L18.333383529296874,12.775434L17.500050529296875,13.602991L17.500050529296875,15.833333Q17.500050529296875,16.666666,16.666717529296875,16.666666L14.414989529296875,16.666666L13.575839529296875,17.5Z" fill="currentColor"></path><path d="M9.174291491940625,18.04064271171875L9.755228874140625,15.79055121171875C9.800609174140625,15.61478421171875,10.021303054140626,15.55478481171875,10.150497434140625,15.683092611718749L11.777121994140625,17.29854201171875C11.904038894140625,17.42458721171875,11.848330494140626,17.639632211718748,11.675921394140625,17.68919941171875L9.468359234140625,18.32384111171875C9.293019634140625,18.37424751171875,9.128953513140624,18.216246611718752,9.174291491940625,18.04064271171875ZM10.576257894140625,15.012749711718751L12.443039694140625,16.86670681171875C12.535153194140625,16.95818801171875,12.684499694140625,16.95818801171875,12.776614194140624,16.86670681171875L18.264235494140625,11.41677901171875C18.355170294140628,11.32647181171875,18.356506394140624,11.18046881171875,18.267240494140623,11.08853471171875L16.470781294140625,9.23833659271875C16.379624394140624,9.14445133871875,16.228809794140624,9.14258715871875,16.135326394140627,9.23419014371875L10.577380994140626,14.68035941171875C10.484210394140625,14.77165551171875,10.483706394140626,14.92083451171875,10.576257894140625,15.012749711718751Z" fill="currentColor"></path></svg>'
+/** Compact pencil used beside rectangle and ellipse markup glyphs. */
+const MARKUP_ICON_PENCIL =
+  '<g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" transform="rotate(46 14.8 9)"><rect x="13.65" y="4.7" width="2.3" height="5.6" rx="1.05"/><path d="M13.65 10.3 14.8 12.9 15.95 10.3"/></g>'
 
-/** Markup circle icon (copied from cad-viewer `revCircle.svg`). */
-export const ICON_REV_CIRCLE =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path d="M17.366041494140624,8.13321261171875C16.667592494140624,4.38473101171875,13.396319494140625,1.66668701171875,9.583322994140625,1.66668701171875C5.211068394140625,1.66668701171875,1.666656494140625,5.21109891171875,1.666656494140625,9.58335351171875C1.6666564941406257,13.42974001171875,4.431342794140625,16.71955701171875,8.220290194140624,17.381800011718752L8.429374694140625,16.57206001171875C5.009032494140625,16.00730701171875,2.499989804140625,13.05000701171875,2.499989804140625,9.58335351171875C2.499989804140625,5.67133621171875,5.671305694140625,2.50002032171875,9.583322994140625,2.50002032171875C12.822601494140624,2.50002032171875,15.649155494140626,4.69743511171875,16.447924494140626,7.83668611171875Q16.522337494140626,7.82859321171875,16.600395494140624,7.82956071171875Q17.046328494140624,7.83507251171875,17.366041494140624,8.13321261171875Z" fill="currentColor"></path><path d="M9.174291491940625,18.04064271171875L9.755228874140625,15.79055121171875C9.800609174140625,15.61478421171875,10.021303054140626,15.55478481171875,10.150497434140625,15.683092611718749L11.777121994140625,17.29854201171875C11.904038894140625,17.42458721171875,11.848330494140626,17.639632211718748,11.675921394140625,17.68919941171875L9.468359234140625,18.32384111171875C9.293019634140625,18.37424751171875,9.128953513140624,18.216246611718752,9.174291491940625,18.04064271171875ZM10.576257894140625,15.012749711718751L12.443039694140625,16.86670681171875C12.535153194140625,16.95818801171875,12.684499694140625,16.95818801171875,12.776614194140624,16.86670681171875L18.264235494140625,11.41677901171875C18.355170294140628,11.32647181171875,18.356506394140624,11.18046881171875,18.267240494140623,11.08853471171875L16.470781294140625,9.23833659271875C16.379624394140624,9.14445133871875,16.228809794140624,9.14258715871875,16.135326394140627,9.23419014371875L10.577380994140626,14.68035941171875C10.484210394140625,14.77165551171875,10.483706394140626,14.92083451171875,10.576257894140625,15.012749711718751Z" fill="currentColor"></path></svg>'
+/** Composes a markup-tool icon: unique glyph on top of the shared callout base. */
+function markupToolIcon(glyph: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20">${MARKUP_ICON_BASE}${glyph}</svg>`
+}
 
-/** Markup callout icon (Element Plus ChatLineSquare, same as cad-viewer). */
-export const ICON_MARKUP_CALLOUT = elementPlusIcon(
-  'M160 826.88 273.536 736H800a64 64 0 0 0 64-64V256a64 64 0 0 0-64-64H224a64 64 0 0 0-64 64zM296 800 147.968 918.4A32 32 0 0 1 96 893.44V256a128 128 0 0 1 128-128h576a128 128 0 0 1 128 128v416a128 128 0 0 1-128 128z',
-  'M352 512h320q32 0 32 32t-32 32H352q-32 0-32-32t32-32m0-192h320q32 0 32 32t-32 32H352q-32 0-32-32t32-32'
+/** Markup / revision cloud icon (filled cloud over a callout base). */
+export const ICON_REV_CLOUD = markupToolIcon(
+  '<path fill="currentColor" d="M6.4 12.2c-1.85 0-3.3-1.25-3.3-2.85 0-1.35.95-2.5 2.3-2.8.45-1.7 1.95-2.85 3.7-2.85 1.25 0 2.35.55 3.05 1.45.55-.7 1.45-1.15 2.5-1.15 1.85 0 3.25 1.3 3.25 2.95 0 .3-.05.55-.1.8 1.2.4 2.05 1.4 2.05 2.65 0 1.55-1.5 2.8-3.4 2.8H6.4Z"/>'
 )
 
-/** Markup text icon (capital A, same as cad-viewer `revText.svg`). */
-export const ICON_MARKUP_TEXT =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="currentColor" fill-rule="evenodd" d="M10 2.2 17.2 17.6h-2.8l-1.45-4.2H7.05L5.6 17.6H2.8L10 2.2Zm0 4.3L8.2 11.2h3.6L10 6.5Z"/></svg>'
+/** Markup rectangle icon (outlined rect, corner grips, and pencil over a callout base). */
+export const ICON_REV_RECT = markupToolIcon(
+  `<rect fill="none" stroke="currentColor" stroke-width="1.35" x="5" y="2.8" width="8.2" height="7.2"/><rect fill="${TOOL_ICON_ACCENT}" x="4.2" y="2" width="2" height="2"/><rect fill="${TOOL_ICON_ACCENT}" x="12.2" y="9" width="2" height="2"/>${MARKUP_ICON_PENCIL}`
+)
+
+/** Markup circle icon (outlined ellipse, quadrant grips, and pencil over a callout base). */
+export const ICON_REV_CIRCLE = markupToolIcon(
+  `<ellipse fill="none" stroke="currentColor" stroke-width="1.35" cx="9" cy="6.6" rx="4" ry="3.6"/><rect fill="${TOOL_ICON_ACCENT}" x="8" y="2.1" width="2" height="2"/><rect fill="${TOOL_ICON_ACCENT}" x="4" y="5.6" width="2" height="2"/>${MARKUP_ICON_PENCIL}`
+)
+
+/** Markup callout / leader icon (text box and leader over a callout base). */
+export const ICON_MARKUP_CALLOUT = markupToolIcon(
+  '<path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M4.4 12.6 10.2 7"/><rect fill="currentColor" x="10.2" y="1.2" width="7.8" height="5.8" rx=".35"/>'
+)
+
+/** Markup text icon (capital A over a callout base). */
+export const ICON_MARKUP_TEXT = markupToolIcon(
+  '<path fill="currentColor" fill-rule="evenodd" d="M10 2.2 15.3 13.1h-2.2l-1.05-2.95H7.95L6.9 13.1H4.7L10 2.2Zm0 3.4-1.15 3.2h2.3L10 5.6Z"/>'
+)
 
 /** Markup line icon (diagonal segment with endpoints). */
 export const ICON_MARKUP_LINE =
@@ -109,9 +169,9 @@ export const ICON_MARKUP_LINE =
 export const ICON_MARKUP_HIGHLIGHT =
   '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><rect x="3" y="5.5" width="14" height="9" rx="1.5" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-width="1.5"/></svg>'
 
-/** Markup arrow icon (Element Plus Right, same as cad-viewer). */
-export const ICON_MARKUP_ARROW = elementPlusIcon(
-  'M754.752 480H160a32 32 0 1 0 0 64h594.752L521.344 777.344a32 32 0 0 0 45.312 45.312l288-288a32 32 0 0 0 0-45.312l-288-288a32 32 0 1 0-45.312 45.312z'
+/** Markup arrow icon (filled NE arrow over a callout base). */
+export const ICON_MARKUP_ARROW = markupToolIcon(
+  '<g transform="rotate(-40 10 7.6)" fill="currentColor"><path d="M3.5 6.75h9V5.15L16.7 7.6 12.5 10.05V8.45h-9Z"/></g>'
 )
 
 /** Markup stamp icon (Element Plus Stamp, same as cad-viewer). */
@@ -119,9 +179,12 @@ export const ICON_MARKUP_STAMP = elementPlusIcon(
   'M624 475.968V640h144a128 128 0 0 1 128 128H128a128 128 0 0 1 128-128h144V475.968a192 192 0 1 1 224 0M128 896v-64h768v64z'
 )
 
-/** Markup / review panel icon (copied from cad-viewer `markupPanel.svg`). */
+/** Markup / review panel icon (list page with a search loupe). */
 export const ICON_MARKUP_PANEL =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><rect x="3.5" y="3" width="13" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" /><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M3.5 6.5h13" /><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M6.5 9.5h7M6.5 12h7M6.5 14.5h4.5" /></svg>'
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><rect x="3.5" y="3" width="13" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M3.5 6.5h13"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M6.5 9.5h7M6.5 12h7M6.5 14.5h3.2"/><g fill="none" stroke="${TOOL_ICON_ACCENT}" stroke-width="1.7" stroke-linecap="round"><circle cx="14.5" cy="14.7" r="4.2"/><path d="M17.5 17.7 19.5 19.7"/></g></svg>`
+
+/** Measurement list panel icon (same list glyph as the review panel). */
+export const ICON_MEASUREMENT_PANEL = ICON_MARKUP_PANEL
 
 /**
  * Import icon (document + down arrow).
@@ -137,10 +200,8 @@ export const ICON_MARKUP_IMPORT =
 export const ICON_MARKUP_EXPORT =
   '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" d="M15.5 2H9.1L4.5 6.6V16.5A1.5 1.5 0 0 0 6 18h9.5A1.5 1.5 0 0 0 17 16.5V3.5A1.5 1.5 0 0 0 15.5 2z"/><path stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" d="M9.1 2v4.6H4.5"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M10 14.2V8M7.2 10.4 10 7.5l2.8 2.9"/></svg>'
 
-/** Clear markups icon (Element Plus Delete, same as cad-viewer). */
-export const ICON_CLEAR_MARKUPS = elementPlusIcon(
-  'M160 256H96a32 32 0 0 1 0-64h256V95.936a32 32 0 0 1 32-32h256a32 32 0 0 1 32 32V192h256a32 32 0 1 1 0 64h-64v672a32 32 0 0 1-32 32H192a32 32 0 0 1-32-32zm448-64v-64H416v64zM224 896h576V256H224zm192-128a32 32 0 0 1-32-32V416a32 32 0 0 1 64 0v320a32 32 0 0 1-32 32m192 0a32 32 0 0 1-32-32V416a32 32 0 0 1 64 0v320a32 32 0 0 1-32 32'
-)
+/** Clear markups toolbar icon. */
+export const ICON_CLEAR_MARKUPS = ICON_CLEAR
 
 /** Show markups icon (Element Plus View, same as cad-viewer). */
 export const ICON_ANNOTATION_SHOW = elementPlusIcon(
@@ -220,9 +281,20 @@ export const ICON_CHEVRON_RIGHT =
 export const ICON_CHEVRON_LEFT =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M6.5 10 11 14.5V5.5L6.5 10Z"/></svg>'
 
-/** Restore the view captured when an HTML export first opened. */
+/** Restore the view captured when a layout was first framed (ZOOM Original). */
 export const ICON_ZOOM_ORIGINAL =
   '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="currentColor" d="M10 2.6 18 9.8h-2.1V17h-4.4v-4.4H8.5V17H4.1V9.8H2L10 2.6Zm0 1.8L5.3 9.8V15.8h2V11.4h5.4v4.4h2V9.8L10 4.4Z"/></svg>'
+
+/** Settings / gear parent icon for compact toolbars. */
+export const ICON_SETTINGS =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="currentColor" d="M8.08 2.1h3.84l.32 1.52a6.4 6.4 0 0 1 1.36.78l1.48-.64 1.92 1.92-.64 1.48c.3.42.54.88.78 1.36l1.52.32v3.84l-1.52.32a6.4 6.4 0 0 1-.78 1.36l.64 1.48-1.92 1.92-1.48-.64a6.4 6.4 0 0 1-1.36.78l-.32 1.52H8.08l-.32-1.52a6.4 6.4 0 0 1-1.36-.78l-1.48.64-1.92-1.92.64-1.48a6.4 6.4 0 0 1-.78-1.36L1.34 11.92V8.08l1.52-.32c.24-.48.48-.94.78-1.36l-.64-1.48 1.92-1.92 1.48.64c.42-.3.88-.54 1.36-.78L8.08 2.1ZM10 7.2A2.8 2.8 0 1 0 10 12.8 2.8 2.8 0 0 0 10 7.2Z"/></svg>'
+
+/**
+ * Simulated-mouse touch pick toggle: crosshair above a touch contact so the
+ * fingertip does not obscure the sample point.
+ */
+export const ICON_SIMULATED_MOUSE =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M10 2.5v6M7 5.5h6"/><circle cx="10" cy="14.5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="14.5" r="1.1" fill="currentColor"/></svg>'
 
 /** Show-all-layers action icon. */
 export const ICON_LAYER_ON =
@@ -268,6 +340,10 @@ export const ICON_MARKUP_SHOW = ICON_ANNOTATION_SHOW
 
 /** Alias for {@link ICON_ANNOTATION_HIDE}. */
 export const ICON_MARKUP_HIDE = ICON_ANNOTATION_HIDE
+
+/** Overflow / more menu icon (horizontal ellipsis). */
+export const ICON_MORE =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 20 20"><circle cx="4" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="16" cy="10" r="1.6" fill="currentColor"/></svg>'
 
 /**
  * Creates a DOM icon element from an SVG string, element, or factory.

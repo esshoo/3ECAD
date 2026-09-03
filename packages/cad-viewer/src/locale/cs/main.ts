@@ -424,6 +424,11 @@ export default {
       text: 'Vzdálenost',
       description: 'Změří vzdálenost mezi dvěma body'
     },
+    measureContinuous: {
+      text: 'Spojité',
+      description:
+        'Měří řetězené vzdálenosti postupným zadáváním bodů, dokud nestisknete Enter nebo Zrušit'
+    },
     measureAngle: {
       text: 'Úhel',
       description: 'Změří úhel mezi dvěma čarami se společným vrcholem'
@@ -439,6 +444,10 @@ export default {
     measurePoint: {
       text: 'Bod',
       description: 'Změří souřadnice X/Y vybraného bodu'
+    },
+    measurementPanel: {
+      text: 'Panel měření',
+      description: 'Otevře paletu měření'
     },
     clearMeasurements: {
       text: 'Vymazat',
@@ -465,7 +474,7 @@ export default {
       description: 'Posune pohled beze změny směru pohledu a zvětšení'
     },
     markupPanel: {
-      text: 'Kontrola',
+      text: 'Panel poznámek',
       description: 'Otevře paletu poznámek'
     },
     markupText: {
@@ -488,6 +497,10 @@ export default {
       text: 'Šipka',
       description: 'Vytvoří šipkovou poznámku'
     },
+    markupLine: {
+      text: 'Úsečka',
+      description: 'Vytvoří liniovou poznámku'
+    },
     markupCallout: {
       text: 'Odkaz',
       description: 'Vytvoří odkazovou poznámku'
@@ -508,10 +521,6 @@ export default {
       text: 'Barva',
       description: 'Nastaví barvu nových poznámek'
     },
-    markupLineWeight: {
-      text: 'Tloušťka čáry',
-      description: 'Nastaví tloušťku čáry nových poznámek'
-    },
     markupFontSize: {
       text: 'Velikost písma',
       description: 'Nastaví velikost písma textových a odkazových poznámek'
@@ -520,11 +529,6 @@ export default {
       text: 'Barva',
       description:
         'Nastaví barvu vybraného měření, nebo měření, která přidáte příště'
-    },
-    measurementLineWeight: {
-      text: 'Tloušťka čáry',
-      description:
-        'Nastaví tloušťku čáry vybraného měření, nebo měření, která přidáte příště'
     },
     measurementFontSize: {
       text: 'Velikost písma',
@@ -574,7 +578,6 @@ export default {
       commandLine: 'Příkazový řádek',
       coordinate: 'Souřadnice',
       entityInfo: 'Informace o objektu',
-      fileName: 'Název souboru',
       languageSelector: 'Volba jazyka',
       ribbon: 'Pás karet',
       toolbar: 'Panel nástrojů',
@@ -630,7 +633,6 @@ export default {
     moreLayouts: 'Další rozvržení'
   },
   toolPalette: {
-    moreTabs: 'Další karty',
     entityProperties: {
       tab: 'Vlastnosti',
       title: 'Vlastnosti objektu',
@@ -737,6 +739,23 @@ export default {
         question: 'Otázka',
         answered: 'Zodpovězeno',
         closed: 'Uzavřeno'
+      }
+    },
+    measurements: {
+      tab: 'Měření',
+      title: 'Měření',
+      empty: 'Zatím žádná měření',
+      type: 'Typ',
+      value: 'Hodnota',
+      filterAll: 'Vše',
+      delete: 'Odstranit',
+      clear: 'Vymazat vše',
+      typeValues: {
+        distance: 'Vzdálenost',
+        angle: 'Úhel',
+        area: 'Plocha',
+        arc: 'Oblouk',
+        point: 'XY'
       }
     },
     missingResources: {

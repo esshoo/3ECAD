@@ -291,6 +291,9 @@ export default {
     measurementvis: {
       description: 'Geçerli yerleşimdeki ölçümleri gösterir veya gizler'
     },
+    measurementpanel: {
+      description: 'Ölçüm paletini açar'
+    },
     measurementexport: {
       description: 'Ölçümleri sidecar JSON dosyasına dışa aktarır'
     },
@@ -309,6 +312,10 @@ export default {
     },
     measuredistance: {
       description: 'İki nokta arasındaki mesafeyi ve delta değerlerini ölçer'
+    },
+    measurecontinuous: {
+      description:
+        'Enter veya İptal edilene kadar ardışık noktalar seçerek zincirleme mesafeleri ölçer'
     },
     measurepoint: {
       description: 'Seçilen noktanın X/Y koordinatlarını ölçer'

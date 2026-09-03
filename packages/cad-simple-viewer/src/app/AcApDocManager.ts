@@ -18,8 +18,6 @@ import {
   acapBindMarkupSession,
   AcApCacheFontCmd,
   AcApCircleCmd,
-  AcApClearMarkupsCmd,
-  AcApClearMeasurementsCmd,
   AcApCloseCmd,
   AcApConvertToDxfCmd,
   AcApConvertToPngCmd,
@@ -48,26 +46,6 @@ import {
   AcApLayoffCmd,
   AcApLineCmd,
   AcApLogCmd,
-  AcApMarkupArrowCmd,
-  AcApMarkupCalloutCmd,
-  AcApMarkupCircleCmd,
-  AcApMarkupCloudCmd,
-  AcApMarkupExportCmd,
-  AcApMarkupHighlightCmd,
-  AcApMarkupImportCmd,
-  AcApMarkupLineCmd,
-  AcApMarkupRectCmd,
-  AcApMarkupStampCmd,
-  AcApMarkupTextCmd,
-  AcApMarkupVisibilityCmd,
-  AcApMeasureAngleCmd,
-  AcApMeasureArcCmd,
-  AcApMeasureAreaCmd,
-  AcApMeasureDistanceCmd,
-  AcApMeasurementExportCmd,
-  AcApMeasurementImportCmd,
-  AcApMeasurementVisibilityCmd,
-  AcApMeasurePointCmd,
   AcApMLineCmd,
   AcApMoveCmd,
   AcApMTextCmd,
@@ -79,6 +57,7 @@ import {
   AcApPolylineCmd,
   AcApQNewCmd,
   AcApRayCmd,
+  AcApReadingModeCmd,
   AcApRectCmd,
   AcApRedoCmd,
   AcApRegenCmd,
@@ -98,13 +77,17 @@ import {
   resetMeasurementSession
 } from '../command'
 import {
+  acapGetDrawStyleSessionAccessory
+} from '../command/AcApDrawStyleSession'
+import { registerMarkupCommands } from '../command/markup/AcApRegisterMarkupCommands'
+import { registerMeasureCommands } from '../command/measure/AcApRegisterMeasureCommands'
+import {
   AcEdCalculateSizeCallback,
   AcEdCommand,
   AcEdCommandStack,
   AcEdOpenMode
 } from '../editor'
 import { AcApPluginManager } from '../plugin/AcApPluginManager'
-import { AcApDrawStyleToolbar } from '../ui/AcApDrawStyleToolbar'
 import { isScriptQuitCommand, parseScriptLines } from '../util/AcApScriptParser'
 import { acapWithSecondaryDatabase } from '../util/AcApSecondaryDatabase'
 import { AcTrView2d } from '../view'
@@ -186,7 +169,8 @@ const DEFAULT_COMMAND_ALIASES: Record<string, string[]> = {
   XLINE: ['XL'],
   ZOOM: ['Z'],
   UNDO: ['U'],
-  REDO: ['REDO']
+  REDO: ['REDO'],
+  READINGMODE: ['RM']
 }
 
 /**
@@ -413,8 +397,6 @@ export class AcApDocManager {
   private _commandManager: AcEdCommandStack
   /** Plugin manager */
   private _pluginManager: AcApPluginManager
-  /** Overlay for measurement / markup draw color, lineweight, and font size */
-  private readonly _drawStyleToolbar: AcApDrawStyleToolbar
   /**
    * Alias overrides provided by caller options.
    *
@@ -523,7 +505,6 @@ export class AcApDocManager {
     )
     this._sessions = [this._activeSession]
     acapBindMarkupSession(this._activeSession.id)
-    this._drawStyleToolbar = new AcApDrawStyleToolbar(view)
 
     this._fontLoader = new AcApFontLoader()
     const fontsUrl = this.resolveFontsBaseUrl()
@@ -988,11 +969,10 @@ export class AcApDocManager {
   }
 
   /**
-   * Overlay shown in the filename slot while a measurement or markup
-   * drawing command is active.
+   * Color / font-size session accessory for measurement and markup drawing.
    */
-  get drawStyleToolbar() {
-    return this._drawStyleToolbar
+  get drawStyleSessionAccessory() {
+    return acapGetDrawStyleSessionAccessory(this._mainView)
   }
 
   /**
@@ -1367,6 +1347,42 @@ export class AcApDocManager {
   }
 
   /**
+   * Whether transient reading mode is active on a view (default: current view).
+   *
+   * @param view - Target canvas; defaults to {@link curView}.
+   */
+  isReadingModeEnabled(view?: AcTrView2d): boolean {
+    const target = view ?? (this.curView as AcTrView2d)
+    return target.readingModeEnabled
+  }
+
+  /**
+   * Enables or disables transient reading mode on a view (default: current view).
+   *
+   * Reading mode forces black linework on a white canvas without modifying the
+   * drawing database. It shares the compare-display colour path, so it is
+   * mutually exclusive with active compare display on that view.
+   *
+   * @param enabled - When true, enables reading mode; when false, restores the
+   *   previous canvas background and entity colours.
+   * @param view - Target canvas; defaults to {@link curView}.
+   */
+  setReadingMode(enabled: boolean, view?: AcTrView2d): void {
+    const target = view ?? (this.curView as AcTrView2d)
+    target.setReadingMode(enabled)
+  }
+
+  /**
+   * Toggles transient reading mode on a view (default: current view).
+   *
+   * @param view - Target canvas; defaults to {@link curView}.
+   */
+  toggleReadingMode(view?: AcTrView2d): void {
+    const target = view ?? (this.curView as AcTrView2d)
+    target.toggleReadingMode()
+  }
+
+  /**
    * Applies compare-display coloring to one overlay layout.
    *
    * @param overlayId - Id returned by {@link loadOverlay} / {@link registerOverlayDatabase}.
@@ -1606,35 +1622,10 @@ export class AcApDocManager {
     addSystemCommand('erase', 'erase', new AcApEraseCmd())
     addSystemCommand('hideobjects', 'hideobjects', new AcApHideObjectsCmd())
     addSystemCommand('dimlinear', 'dimlinear', new AcApDimLinearCmd())
-    addSystemCommand(
-      'measuredistance',
-      'measuredistance',
-      new AcApMeasureDistanceCmd()
-    )
-    addSystemCommand('measurearea', 'measurearea', new AcApMeasureAreaCmd())
-    addSystemCommand('measureangle', 'measureangle', new AcApMeasureAngleCmd())
-    addSystemCommand('measurearc', 'measurearc', new AcApMeasureArcCmd())
-    addSystemCommand('measurepoint', 'measurepoint', new AcApMeasurePointCmd())
-    addSystemCommand(
-      'clearmeasurements',
-      'clearmeasurements',
-      new AcApClearMeasurementsCmd()
-    )
-    addSystemCommand(
-      'measurementvis',
-      'measurementvis',
-      new AcApMeasurementVisibilityCmd()
-    )
-    addSystemCommand(
-      'measurementexport',
-      'measurementexport',
-      new AcApMeasurementExportCmd()
-    )
-    addSystemCommand(
-      'measurementimport',
-      'measurementimport',
-      new AcApMeasurementImportCmd()
-    )
+    registerMeasureCommands(addSystemCommand, {
+      view: this._mainView,
+      commandManager: this._commandManager
+    })
     addSystemCommand('-hatch', '-hatch', new AcApHatchCmd())
     addSystemCommand('imageattach', 'imageattach', new AcApImageAttachCmd())
     addSystemCommand('-insert', '-insert', new AcApInsertCmd())
@@ -1670,31 +1661,15 @@ export class AcApDocManager {
     addSystemCommand('rectang', 'rectang', new AcApRectCmd())
     addSystemCommand('regen', 'regen', new AcApRegenCmd())
     addSystemCommand('revcloud', 'revcloud', new AcApRevCloudCmd())
-    addSystemCommand('markuptext', 'markuptext', new AcApMarkupTextCmd())
-    addSystemCommand('markupline', 'markupline', new AcApMarkupLineCmd())
-    addSystemCommand('markuparrow', 'markuparrow', new AcApMarkupArrowCmd())
-    addSystemCommand('markupcloud', 'markupcloud', new AcApMarkupCloudCmd())
-    addSystemCommand('markuprect', 'markuprect', new AcApMarkupRectCmd())
-    addSystemCommand('markupcircle', 'markupcircle', new AcApMarkupCircleCmd())
-    addSystemCommand(
-      'markuphighlight',
-      'markuphighlight',
-      new AcApMarkupHighlightCmd()
-    )
-    addSystemCommand(
-      'markupcallout',
-      'markupcallout',
-      new AcApMarkupCalloutCmd()
-    )
-    addSystemCommand('markupstamp', 'markupstamp', new AcApMarkupStampCmd())
-    addSystemCommand('markupvis', 'markupvis', new AcApMarkupVisibilityCmd())
-    addSystemCommand('clearmarkups', 'clearmarkups', new AcApClearMarkupsCmd())
-    addSystemCommand('markupexport', 'markupexport', new AcApMarkupExportCmd())
-    addSystemCommand('markupimport', 'markupimport', new AcApMarkupImportCmd())
+    registerMarkupCommands(addSystemCommand, {
+      view: this._mainView,
+      commandManager: this._commandManager
+    })
     addSystemCommand('select', 'select', new AcApSelectCmd())
     addSystemCommand('sketch', 'sketch', new AcApSketchCmd())
     addSystemCommand('spline', 'spline', new AcApSplineCmd())
     addSystemCommand('switchbg', 'switchbg', new AcApSwitchBgCmd())
+    addSystemCommand('readingmode', 'readingmode', new AcApReadingModeCmd())
     addSystemCommand(
       'unisolateobjects',
       'unisolateobjects',
@@ -1914,15 +1889,18 @@ export class AcApDocManager {
     // so its `commandEnded` lifecycle finishes before the new one begins.
     await this._commandManager.cancelActive()
 
-    const promise = cmd.trigger(this.context).finally(() => {
-      if (!options.preserveScriptInputs) {
-        this.editor.clearScriptInputs()
+    // markActive must run before trigger(): the first getPoint prompt is
+    // opened synchronously until the first await, and the mobile session
+    // accessory reads commandManager.activeCommand.
+    await this._commandManager.runActive(cmd, this.curView, async () => {
+      try {
+        await cmd.trigger(this.context)
+      } finally {
+        if (!options.preserveScriptInputs) {
+          this.editor.clearScriptInputs()
+        }
       }
-      this._commandManager.clearActive(cmd)
     })
-    this._commandManager.markActive(cmd, this.curView, promise)
-
-    await promise
   }
 
   /**
@@ -1998,6 +1976,7 @@ export class AcApDocManager {
       // Drop overlay / markup history before view.clear() disposes HTML.
       resetMeasurementSession()
       resetMarkupSession()
+      AcApZoomCmd.clearOriginalViews()
       this.openProgressView.clear()
     }
     this.openProgressView.bindDrawDatabase(this.context.doc.database)
@@ -2083,8 +2062,10 @@ export class AcApDocManager {
       const openViewMode = this.resolveOpenViewMode(options)
 
       const progressiveRendering = options?.progressiveRendering ?? false
+      let framedSynchronously = false
       if (isPaperSpaceActive && layoutLimits && !layoutLimits.isEmpty()) {
         view.zoomTo(layoutLimits)
+        framedSynchronously = true
       } else if (openViewMode === AcApOpenViewMode.Extents) {
         if (progressiveRendering) {
           view.beginProgressiveOpenFit()
@@ -2100,8 +2081,10 @@ export class AcApDocManager {
 
         if (activeModelViewBox) {
           view.zoomTo(activeModelViewBox)
+          framedSynchronously = true
         } else if (this.hasUsableDrawingExtents(db)) {
           view.zoomTo(new AcGeBox2d(db.extmin, db.extmax))
+          framedSynchronously = true
         } else {
           if (progressiveRendering) {
             view.beginProgressiveOpenFit()
@@ -2122,6 +2105,11 @@ export class AcApDocManager {
       // above relies on `curView` being an `AcTrView2d`, and the
       // markLayoutAsInitialized method is part of that contract.
       view.markLayoutAsInitialized(db.currentSpaceId)
+      // `zoomToFitDrawing` frames asynchronously; capture original view in
+      // its completion callback instead of here (pre-fit camera is wrong).
+      if (framedSynchronously) {
+        AcApZoomCmd.rememberOriginalView(view, db.currentSpaceId)
+      }
       // OPENPROF: db.read is done; wait for batchConvert to drain, then print.
       this._openFileProfiler.markReadCompleteAndScheduleReport(view)
     } else {

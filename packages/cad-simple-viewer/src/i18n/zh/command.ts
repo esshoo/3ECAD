@@ -253,6 +253,9 @@ export default {
     measurementvis: {
       description: '显示或隐藏当前布局上的测量标注'
     },
+    measurementpanel: {
+      description: '打开测量面板'
+    },
     measurementexport: {
       description: '将测量标注导出为 sidecar JSON 文件'
     },
@@ -270,6 +273,9 @@ export default {
     },
     measuredistance: {
       description: '测量两点之间的距离及坐标增量'
+    },
+    measurecontinuous: {
+      description: '连续拾取多个点测量各段距离，直到按 Enter 或取消'
     },
     measurepoint: {
       description: '测量拾取点的 X/Y 坐标'
@@ -431,6 +437,9 @@ export default {
     },
     switchbg: {
       description: '切换绘图区域背景颜色，在白色和黑色背景之间切换'
+    },
+    readingmode: {
+      description: '切换阅读模式：白底黑线，便于阅读复杂图纸'
     },
     unisolateobjects: {
       description: '重新显示 HIDEOBJECTS 隐藏的所有对象'
