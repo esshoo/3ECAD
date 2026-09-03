@@ -282,6 +282,9 @@ export default {
     measurementvis: {
       description: 'Zobrazí nebo skryje měření na aktuálním rozvržení'
     },
+    measurementpanel: {
+      description: 'Otevře paletu měření'
+    },
     measurementexport: {
       description: 'Exportuje měření do sidecar JSON souboru'
     },
@@ -299,6 +302,10 @@ export default {
     },
     measuredistance: {
       description: 'Změří vzdálenost a přírůstky mezi dvěma body'
+    },
+    measurecontinuous: {
+      description:
+        'Měří řetězené vzdálenosti postupným zadáváním bodů, dokud nestisknete Enter nebo Zrušit'
     },
     measurepoint: {
       description: 'Změří souřadnice X/Y vybraného bodu'

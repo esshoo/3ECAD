@@ -60,6 +60,7 @@ import {
   ElIcon
 } from 'element-plus'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 /**
  * Render-ready line weight entry shown by the select control.
@@ -83,11 +84,10 @@ interface LineWeightSelectProps {
   disabled?: boolean
   /** Placeholder shown when no line weight can be resolved. */
   placeholder?: string
-  /** When true, hide ByLayer / ByBlock / Default (overlay style pickers). */
+  /** When true, hide ByLayer / ByBlock / Default. */
   numericOnly?: boolean
   /**
-   * Narrower trigger sized for numeric weights plus a stroke preview
-   * (measure / markup style pickers).
+   * Narrower trigger sized for numeric weights plus a stroke preview.
    */
   compact?: boolean
 }
@@ -95,6 +95,8 @@ interface LineWeightSelectProps {
 const props = withDefaults(defineProps<LineWeightSelectProps>(), {
   compact: false
 })
+
+const { locale } = useI18n()
 
 const popperClass = computed(() =>
   props.compact
@@ -116,11 +118,11 @@ const emit = defineEmits<{
 function formatLabel(value: AcGiLineWeight): string {
   switch (value) {
     case AcGiLineWeight.ByLayer:
-      return 'ByLayer'
+      return locale.value === 'ar' ? 'حسب الطبقة' : 'ByLayer'
     case AcGiLineWeight.ByBlock:
-      return 'ByBlock'
+      return locale.value === 'ar' ? 'حسب الكتلة' : 'ByBlock'
     case AcGiLineWeight.ByLineWeightDefault:
-      return 'Default'
+      return locale.value === 'ar' ? 'افتراضي' : 'Default'
     default:
       return `${(value / 100).toFixed(2)} mm`
   }
@@ -134,6 +136,7 @@ function formatLabel(value: AcGiLineWeight): string {
  */
 function previewPx(value: AcGiLineWeight): number | null {
   if (value < 0) return null
+  if (value === 0) return 1
   return Math.max(1, Math.min(6, value / 40))
 }
 
@@ -146,7 +149,7 @@ function previewPx(value: AcGiLineWeight): number | null {
  * @returns A sort order compatible with `Array.prototype.sort`.
  */
 function sortLineWeightValues(a: AcGiLineWeight, b: AcGiLineWeight) {
-  const specialOrder = [
+  const specialOrder: AcGiLineWeight[] = [
     AcGiLineWeight.ByLayer,
     AcGiLineWeight.ByBlock,
     AcGiLineWeight.ByLineWeightDefault
@@ -164,24 +167,24 @@ function sortLineWeightValues(a: AcGiLineWeight, b: AcGiLineWeight) {
   return a - b
 }
 
-const lineWeightItems = computed<LineWeightItem[]>(() =>
-  Array.from(
+const lineWeightItems = computed<LineWeightItem[]>(() => {
+  const values = Array.from(
     new Set(
-      Object.values(AcGiLineWeight).filter(
-        (v): v is AcGiLineWeight =>
-          typeof v === 'number' &&
-          v !== AcGiLineWeight.ByDIPs &&
-          (!props.numericOnly || v > 0)
-      )
+      Object.values(AcGiLineWeight).filter((v): v is AcGiLineWeight => {
+        if (typeof v !== 'number') return false
+        if (v === AcGiLineWeight.ByDIPs) return false
+        if (v === 0) return false
+        if (props.numericOnly) return v > 0
+        return true
+      })
     )
   )
-    .sort(sortLineWeightValues)
-    .map(v => ({
-      value: v,
-      label: formatLabel(v),
-      previewWidth: previewPx(v)
-    }))
-)
+  return values.sort(sortLineWeightValues).map(v => ({
+    value: v,
+    label: formatLabel(v),
+    previewWidth: previewPx(v)
+  }))
+})
 
 const selectedItem = computed<LineWeightItem | undefined>(() =>
   lineWeightItems.value.find(item => item.value === props.modelValue)

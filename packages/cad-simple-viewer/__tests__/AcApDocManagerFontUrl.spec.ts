@@ -46,7 +46,16 @@ jest.mock('../src/view', () => ({
     container: {},
     editor: {
       clearScriptInputs: jest.fn(),
-      enqueueScriptInputs: jest.fn()
+      enqueueScriptInputs: jest.fn(),
+      inputManager: {
+        isMobilePromptOpen: false,
+        mobileChrome: { prepareAccessory: jest.fn(), clearAccessory: jest.fn() },
+        sessionAccessoryHost: {
+          host: {},
+          type: 'desktop'
+        },
+        selectionSessionAccessory: null
+      }
     },
     renderer: {},
     clear: jest.fn(),
@@ -131,8 +140,31 @@ jest.mock('../src/plugin/AcApPluginManager', () => ({
   }))
 }))
 
-jest.mock('../src/ui/AcApDrawStyleToolbar', () => ({
-  AcApDrawStyleToolbar: jest.fn().mockImplementation(() => ({}))
+jest.mock('../src/ui/AcUiDrawStyleSessionAccessory', () => ({
+  AcUiDrawStyleSessionAccessory: jest.fn().mockImplementation(() => ({
+    setActiveKind: jest.fn(),
+    createSessionAccessory: jest.fn(),
+    dispose: jest.fn()
+  }))
+}))
+
+jest.mock('../src/editor/input/ui/AcEdDesktopSessionAccessoryChrome', () => ({
+  AcEdDesktopSessionAccessoryChrome: jest.fn().mockImplementation(() => ({
+    dispose: jest.fn()
+  }))
+}))
+
+jest.mock('../src/command/measure/AcApRegisterMeasureCommands', () => ({
+  registerMeasureCommands: jest.fn()
+}))
+
+jest.mock('../src/command/markup/AcApRegisterMarkupCommands', () => ({
+  registerMarkupCommands: jest.fn()
+}))
+
+jest.mock('../src/command/AcApInstallDrawStyleSessionAccessory', () => ({
+  acapInstallDrawStyleSessionAccessory: jest.fn(),
+  acapGetDrawStyleSessionAccessory: jest.fn()
 }))
 
 jest.mock('../src/editor', () => ({
@@ -201,6 +233,7 @@ jest.mock('../src/command', () => {
     'AcApMeasureAngleCmd',
     'AcApMeasureArcCmd',
     'AcApMeasureAreaCmd',
+    'AcApMeasureContinuousCmd',
     'AcApMeasureDistanceCmd',
     'AcApMeasurementExportCmd',
     'AcApMeasurementImportCmd',
@@ -217,6 +250,7 @@ jest.mock('../src/command', () => {
     'AcApPolylineCmd',
     'AcApQNewCmd',
     'AcApRayCmd',
+    'AcApReadingModeCmd',
     'AcApRectCmd',
     'AcApRegenCmd',
     'AcApRevCloudCmd',

@@ -9,16 +9,26 @@ import {
   type AcApMarkupRecord,
   type AcApOpenDatabaseOptions,
   type AcApWebworkerFiles,
+  acedApplyUiTheme,
   AcEdOpenMode,
+  type AcEdUiTheme,
   type AcTrView2d,
-  listMarkupsForSession
+  createMarkupMeta,
+  getMarkupPresenter,
+  getMarkupStore,
+  isMarkupVisible,
+  listMarkupsForSession,
+  runMarkupEdit,
+  setMarkupVisible
 } from '@mlightcad/cad-simple-viewer'
 import {
+  ICON_ANNOTATION_HIDE,
+  ICON_ANNOTATION_SHOW,
+  ICON_CLEAR_MARKUPS,
   ICON_MARKUP_ARROW,
   ICON_MARKUP_CALLOUT,
   ICON_MARKUP_CIRCLE,
   ICON_MARKUP_CLOUD,
-  ICON_MARKUP_HIGHLIGHT,
   ICON_MARKUP_LINE,
   ICON_MARKUP_RECT,
   ICON_MARKUP_STAMP,
@@ -27,13 +37,35 @@ import {
 import { AcGeBox2d } from '@mlightcad/data-model'
 
 import {
+  acapDiffColorToCssHex,
+  AcApDiffSettingsDialog
+} from './AcApDiffSettingsDialog'
+import {
+  acapChangeSetCloudRole,
   acapCompareDrawings,
+  acapDefaultCompareSysVars,
   type AcApDiffChangeKind,
+  type AcApDiffChangeSet,
   type AcApDiffCompareResult,
-  type AcApDiffEntityHit
+  type AcApDiffCompareSysVars,
+  type AcApDiffEntityHit,
+  acapReadCompareSysVars,
+  acapWriteCompareSysVars
 } from './compare'
 import { acapDiffViewerT, acapRegisterDiffViewerI18n } from './i18n'
-import { acapCreateEmptyFileIcon, acapCreateOpenFileIcon } from './icons'
+import {
+  acapCreateEmptyFileIcon,
+  acapCreateOpenFileIcon,
+  ICON_COMPARE_CLOUDS,
+  ICON_INFO,
+  ICON_OVERLAY,
+  ICON_RESULTS_PANEL,
+  ICON_SETTINGS,
+  ICON_SIDE_BY_SIDE,
+  ICON_SYNC_VIEWS,
+  ICON_THEME_MOON,
+  ICON_THEME_SUNNY
+} from './icons'
 import { acapInjectDiffViewerStyles } from './injectDiffViewerStyles'
 
 /** Which pane of the comparison widget a drawing occupies. */
@@ -69,6 +101,8 @@ export interface AcApDiffViewerOptions {
   openDocumentDefaults?: AcApOpenDatabaseOptions
   /** Compare display colors (left=old/deleted red, right=new/added green). */
   compareColors?: AcApCompareDisplayColors
+  /** Initial UI chrome theme. Default dark. */
+  theme?: AcEdUiTheme
   /** Initial view mode. Default side-by-side. */
   viewMode?: AcApDiffViewMode
   /** Whether the results side panel starts open. Default true. */
@@ -114,6 +148,12 @@ const DEFAULT_OPEN: AcApOpenDatabaseOptions = {
 /** File-name pattern accepted by pane drop / file-picker open. */
 const DRAWING_EXT = /\.(dwg|dxf)$/i
 
+/** Markup comment used to find clouds created from compare change sets. */
+const COMPARE_CLOUD_COMMENT = 'cad-diff-viewer:changeset'
+
+/** Delay before live-preview sysvar edits re-run compare (slider drags). */
+const COMPARE_SYSVAR_PREVIEW_MS = 200
+
 /** Toolbar markup commands shown in the widget chrome. */
 const MARKUP_TOOLS: Array<{
   /** Command string sent to {@link AcApDocManager.sendStringToExecute}. */
@@ -124,14 +164,13 @@ const MARKUP_TOOLS: Array<{
   icon: string
 }> = [
   { command: 'markupcloud', labelKey: 'markupCloud', icon: ICON_MARKUP_CLOUD },
-  { command: 'markupcallout', labelKey: 'markupCallout', icon: ICON_MARKUP_CALLOUT },
-  { command: 'markuptext', labelKey: 'markupText', icon: ICON_MARKUP_TEXT },
   { command: 'markuprect', labelKey: 'markupRect', icon: ICON_MARKUP_RECT },
   { command: 'markupcircle', labelKey: 'markupCircle', icon: ICON_MARKUP_CIRCLE },
+  { command: 'markupcallout', labelKey: 'markupCallout', icon: ICON_MARKUP_CALLOUT },
   { command: 'markuparrow', labelKey: 'markupArrow', icon: ICON_MARKUP_ARROW },
-  { command: 'markupstamp', labelKey: 'markupStamp', icon: ICON_MARKUP_STAMP },
   { command: 'markupline', labelKey: 'markupLine', icon: ICON_MARKUP_LINE },
-  { command: 'markuphighlight', labelKey: 'markupHighlight', icon: ICON_MARKUP_HIGHLIGHT }
+  { command: 'markuptext', labelKey: 'markupText', icon: ICON_MARKUP_TEXT },
+  { command: 'markupstamp', labelKey: 'markupStamp', icon: ICON_MARKUP_STAMP }
 ]
 
 /** Language options shown in the toolbar select (same labels as cad-viewer ribbon). */
@@ -139,7 +178,8 @@ const LOCALE_OPTIONS: Array<{ locale: AcApLocale; label: string }> = [
   { locale: 'en', label: 'English' },
   { locale: 'zh', label: '简体中文' },
   { locale: 'tr', label: 'Türkçe' },
-  { locale: 'cs', label: 'Čeština' }
+  { locale: 'cs', label: 'Čeština' },
+  { locale: 'ar', label: 'العربية' }
 ]
 
 /** Caret used by the language select trigger (Element Plus-style). */
@@ -151,6 +191,55 @@ function localeOptionLabel(locale: AcApLocale): string {
   return (
     LOCALE_OPTIONS.find(option => option.locale === locale)?.label ?? 'English'
   )
+}
+
+/** i18n keys for field ids stored on {@link AcApDiffEntityHit.changes}. */
+const DIFF_FIELD_I18N: Record<
+  string,
+  Parameters<typeof acapDiffViewerT>[0]
+> = {
+  objectId: 'fieldObjectId',
+  layer: 'fieldLayer',
+  color: 'fieldColor',
+  lineType: 'fieldLineType',
+  lineWeight: 'fieldLineWeight',
+  lineTypeScale: 'fieldLineTypeScale',
+  transparency: 'fieldTransparency',
+  thickness: 'fieldThickness',
+  visibility: 'fieldVisibility',
+  startPoint: 'fieldStartPoint',
+  endPoint: 'fieldEndPoint',
+  center: 'fieldCenter',
+  radius: 'fieldRadius',
+  startAngle: 'fieldStartAngle',
+  endAngle: 'fieldEndAngle',
+  position: 'fieldPosition',
+  location: 'fieldLocation',
+  rotation: 'fieldRotation',
+  height: 'fieldHeight',
+  blockName: 'fieldBlockName',
+  scale: 'fieldScale',
+  text: 'fieldText',
+  mtext: 'fieldMtext',
+  extents: 'fieldExtents',
+  geometry: 'fieldGeometry'
+}
+
+/** Localized label for a compare field id. */
+function diffFieldLabel(field: string): string {
+  const key = DIFF_FIELD_I18N[field]
+  return key ? acapDiffViewerT(key) : field
+}
+
+/** Localized display value for a compare field. */
+function formatDiffValue(field: string, value: string): string {
+  if (value === '') return '—'
+  if (field === 'visibility') {
+    return value === 'true'
+      ? acapDiffViewerT('diffVisible')
+      : acapDiffViewerT('diffHidden')
+  }
+  return value
 }
 
 /**
@@ -192,7 +281,9 @@ export class AcApDiffViewer {
   /** Construction options passed by the host. */
   private readonly options: AcApDiffViewerOptions
   /** Resolved compare-display colors after merging defaults. */
-  private readonly colors: Required<AcApCompareDisplayColors>
+  private colors: Required<AcApCompareDisplayColors>
+  /** Session COMPARE sysvars (written to open drawings; COMPAREPROPS is registry). */
+  private sessionSysVars: AcApDiffCompareSysVars
   /** Root widget element appended to {@link AcApDiffViewerOptions.container}. */
   private readonly root: HTMLElement
   /** Top toolbar hosting view-mode, navigation, and markup buttons. */
@@ -215,12 +306,22 @@ export class AcApDiffViewer {
   private readonly btnSideBySide: HTMLButtonElement
   /** Toolbar button that switches to overlay mode. */
   private readonly btnOverlay: HTMLButtonElement
+  /** Toolbar toggle that locks pan/zoom of the two side-by-side canvases. */
+  private readonly btnSyncViews: HTMLButtonElement
   /** Toolbar button that toggles the side panel. */
   private readonly btnTogglePanel: HTMLButtonElement
   /** Toolbar button that jumps to the previous difference. */
   private readonly btnPrev: HTMLButtonElement
   /** Toolbar button that jumps to the next difference. */
   private readonly btnNext: HTMLButtonElement
+  /** Toolbar button that opens the compare-color settings dialog. */
+  private readonly btnSettings: HTMLButtonElement
+  /** Toolbar toggle that shows or hides markup overlays on both panes. */
+  private readonly btnMarkupVis: HTMLButtonElement
+  /** Toolbar button that clears markups on both open drawings. */
+  private readonly btnClearMarkups: HTMLButtonElement
+  /** Toolbar button that toggles light / dark UI chrome. */
+  private readonly btnTheme: HTMLButtonElement
   /** Side-panel tab for compare results. */
   private readonly tabResults: HTMLButtonElement
   /** Side-panel tab for markups. */
@@ -239,6 +340,8 @@ export class AcApDiffViewer {
   private readonly localeMenu: HTMLElement
   /** Host wrapping the language trigger and menu (for outside-click). */
   private readonly localeSelectHost: HTMLElement
+  /** Floating popover that lists field-level old/new values. */
+  private readonly diffPopover: HTMLElement
 
   /** Document currently shown in the left pane, if any. */
   private leftDoc?: AcApDocument
@@ -250,12 +353,19 @@ export class AcApDiffViewer {
   private rightDragDepth = 0
   /** Auto-hide timers for per-pane error banners. */
   private readonly bannerTimers = new Map<AcApDiffViewerSide, number>()
+  /** Current UI chrome theme. */
+  private uiTheme: AcEdUiTheme
   /** Current view mode. */
   private viewMode: AcApDiffViewMode
   /** Whether the side panel is expanded. */
   private sidePanelOpen: boolean
   /** How the results list is grouped. */
   private resultGroupMode: AcApDiffResultGroupMode = 'kind'
+  /**
+   * Collapsed result-list sections, keyed by
+   * `${resultGroupMode}:${groupKey}`. Missing keys are expanded.
+   */
+  private readonly collapsedResultGroups = new Set<string>()
   /** Active side-panel tab. */
   private activeTab: 'results' | 'markups' = 'results'
   /** Last compare output, if both panes have drawings. */
@@ -268,6 +378,45 @@ export class AcApDiffViewer {
   private disposed = false
   /** Whether the language dropdown is open. */
   private localeMenuOpen = false
+  /** Icon that currently owns {@link diffPopover}, if any. */
+  private diffPopoverAnchor?: HTMLButtonElement
+  /** When true, the popover stays open until dismissed. */
+  private diffPopoverPinned = false
+  /** Timer used to delay hiding the popover after mouse leave. */
+  private diffPopoverHideTimer = 0
+  /** Monotonic id so overlapping {@link activateSide} calls keep the latest pane. */
+  private activateSeq = 0
+  /** Serializes {@link activateSide} so hover switches do not overlap. */
+  private activateTail: Promise<unknown> = Promise.resolve()
+  /** Monotonic id so overlapping {@link runCompareAndApply} calls keep the latest result. */
+  private compareSeq = 0
+  /**
+   * Monotonic id so overlapping {@link enterOverlayMode} calls drop stale
+   * overlay registrations instead of leaking them.
+   */
+  private overlayRegisterSeq = 0
+  /** Timer used to debounce Settings sysvar live preview. */
+  private sysVarPreviewTimer = 0
+  /**
+   * Last pane the pointer entered. Toolbar markup commands target this side
+   * even after the pointer leaves for the toolbar.
+   */
+  private lastPointerSide: AcApDiffViewerSide = 'left'
+  /** Last markup tool started from the toolbar; restarted when hover switches panes. */
+  private lastMarkupCommand?: string
+  /** When true, pan/zoom on one side-by-side canvas is copied to the other. */
+  private viewsSynced = false
+  /** Re-entrancy guard so a copied camera does not echo back. */
+  private viewSyncLock = false
+  /** Side whose camera is copied onto the other pane while sync is on. */
+  private viewSyncLeader: AcApDiffViewerSide = 'left'
+  /**
+   * After opening into the follower pane, ignore its auto-fit until the
+   * user pans or zooms so the already-open drawing keeps its camera.
+   */
+  private viewSyncFollowOpen = false
+  /** True when the latest pan/zoom came from pointer or wheel on a pane. */
+  private viewSyncFromUser = false
 
   /**
    * Creates the widget, injects styles, and constructs a dedicated
@@ -279,6 +428,8 @@ export class AcApDiffViewer {
   constructor(options: AcApDiffViewerOptions) {
     this.options = options
     this.colors = mergeColors(options.compareColors)
+    this.sessionSysVars = acapDefaultCompareSysVars()
+    this.uiTheme = options.theme ?? 'dark'
     this.viewMode = options.viewMode ?? 'side-by-side'
     this.sidePanelOpen = options.sidePanelOpen !== false
     acapRegisterDiffViewerI18n()
@@ -299,6 +450,7 @@ export class AcApDiffViewer {
 
     this.root = document.createElement('div')
     this.root.className = 'ml-diff-root'
+    acedApplyUiTheme(this.uiTheme, this.root)
     this.toolbar = document.createElement('div')
     this.toolbar.className = 'ml-diff-toolbar'
     this.body = document.createElement('div')
@@ -313,9 +465,14 @@ export class AcApDiffViewer {
     const chrome = this.createChrome()
     this.btnSideBySide = chrome.btnSideBySide
     this.btnOverlay = chrome.btnOverlay
+    this.btnSyncViews = chrome.btnSyncViews
     this.btnTogglePanel = chrome.btnTogglePanel
     this.btnPrev = chrome.btnPrev
     this.btnNext = chrome.btnNext
+    this.btnSettings = chrome.btnSettings
+    this.btnMarkupVis = chrome.btnMarkupVis
+    this.btnClearMarkups = chrome.btnClearMarkups
+    this.btnTheme = chrome.btnTheme
     this.sidePanel = chrome.sidePanel
     this.resultsBody = chrome.resultsBody
     this.markupsBody = chrome.markupsBody
@@ -328,9 +485,16 @@ export class AcApDiffViewer {
     this.localeMenu = chrome.localeMenu
     this.localeSelectHost = chrome.localeSelectHost
 
+    this.diffPopover = document.createElement('div')
+    this.diffPopover.className = 'ml-diff-change-popover'
+    this.diffPopover.hidden = true
+    this.diffPopover.setAttribute('role', 'tooltip')
+    this.diffPopover.addEventListener('mouseenter', this.cancelDiffPopoverHide)
+    this.diffPopover.addEventListener('mouseleave', this.scheduleDiffPopoverHide)
+
     this.toolbar.append(...chrome.toolbarChildren)
     this.body.append(this.panesHost, this.sidePanel)
-    this.root.append(this.toolbar, this.body)
+    this.root.append(this.toolbar, this.body, this.diffPopover)
     options.container.appendChild(this.root)
 
     const openDefaults = options.openDocumentDefaults ?? DEFAULT_OPEN
@@ -343,12 +507,18 @@ export class AcApDiffViewer {
       openDocumentDefaults: openDefaults,
       webworkerFileUrls: options.webworkerFileUrls
     })
-    AcApDocManager.instance.ensureSplitView(this.rightUi.canvas)
+    const mgr = AcApDocManager.instance
+    this.disableEntitySelection(mgr.mainView)
+    this.disableEntitySelection(mgr.ensureSplitView(this.rightUi.canvas))
+    this.bindViewSyncListeners()
     AcApI18n.events.localeChanged.addEventListener(this.handleLocaleChanged)
     document.addEventListener('pointerdown', this.handleDocumentPointerDown)
+    this.resultsBody.addEventListener('scroll', this.handleDiffPopoverDismiss)
+    window.addEventListener('resize', this.handleDiffPopoverDismiss)
     this.syncChrome()
     this.syncViewModeUi()
     this.syncPanelUi()
+    this.syncCompareColorVars()
   }
 
   /** Drawing currently shown in the left pane, if still live. */
@@ -426,8 +596,11 @@ export class AcApDiffViewer {
     const doc = mgr.curDocument
     if (side === 'left') this.leftDoc = doc
     else this.rightDoc = doc
+    this.adoptCompareSysVarsAfterOpen(doc, Boolean(this.liveDoc(otherDoc)))
     this.syncChrome()
     this.options.events?.opened?.(side, doc)
+    this.syncFollowerAfterOpen(side)
+    this.applyMarkupVisibility(isMarkupVisible())
     await this.runCompareAndApply()
     return true
   }
@@ -443,15 +616,39 @@ export class AcApDiffViewer {
     const doc = side === 'left' ? this.leftDocument : this.rightDocument
     if (!doc) return false
     const mgr = requireInstance()
+    // Same-document checks must be synchronous. Queuing would bump
+    // {@link activateSeq} and can cancel an in-flight markup via
+    // {@link AcApDocManager.activateDocument}.
     if (mgr.curDocument === doc) {
-      this.syncChrome()
+      this.applyFocusClass(side)
       return true
     }
-    const ok = await mgr.activateDocument(doc)
-    this.syncChrome()
-    this.refreshMarkupsList()
-    if (ok) this.options.events?.focus?.(side)
-    return ok
+    const seq = ++this.activateSeq
+    const run = async (): Promise<boolean> => {
+      if (this.disposed || seq !== this.activateSeq) return false
+      const live = side === 'left' ? this.leftDocument : this.rightDocument
+      if (!live) return false
+      const instance = requireInstance()
+      if (instance.curDocument === live) {
+        this.applyFocusClass(side)
+        return true
+      }
+      const ok = await instance.activateDocument(live)
+      if (this.disposed || seq !== this.activateSeq) {
+        if (!this.disposed) this.syncFocusRings()
+        return false
+      }
+      this.applyFocusClass(side)
+      this.refreshMarkupsList()
+      if (ok) this.options.events?.focus?.(side)
+      return ok
+    }
+    const result = this.activateTail.then(run, run)
+    this.activateTail = result.then(
+      () => undefined,
+      () => undefined
+    )
+    return result
   }
 
   /**
@@ -469,6 +666,7 @@ export class AcApDiffViewer {
     }
     this.viewMode = mode
     this.syncViewModeUi()
+    if (mode === 'side-by-side') this.applyViewSyncFromLeader()
     await this.applyCompareDisplay()
     window.dispatchEvent(new Event('resize'))
   }
@@ -485,18 +683,26 @@ export class AcApDiffViewer {
   }
 
   /**
-   * Moves the current difference highlight by `delta` entries in the navigation list.
+   * Moves the current difference by `delta` entries in the navigation list.
    *
    * @param delta - Typically `-1` (previous) or `1` (next).
    */
   async goToDifference(delta: number): Promise<void> {
     const nav = this.compareResult?.navigation ?? []
     if (nav.length === 0) return
-    if (this.navIndex < 0) this.navIndex = delta > 0 ? 0 : nav.length - 1
-    else {
-      this.navIndex = (this.navIndex + delta + nav.length * 50) % nav.length
+    let nextIndex: number
+    if (this.navIndex < 0) {
+      if (delta > 0) nextIndex = 0
+      else if (delta < 0) nextIndex = nav.length - 1
+      else return
+    } else {
+      nextIndex = this.navIndex + delta
+      if (nextIndex < 0 || nextIndex >= nav.length) return
     }
-    await this.focusHit(nav[this.navIndex]!)
+    this.navIndex = nextIndex
+    const hit = nav[this.navIndex]!
+    this.collapsedResultGroups.delete(this.resultGroupStorageKeyForHit(hit))
+    await this.focusHit(hit)
     this.renderResultsList()
   }
 
@@ -507,8 +713,16 @@ export class AcApDiffViewer {
   async destroy(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    this.compareSeq++
+    this.overlayRegisterSeq++
+    this.clearSysVarPreviewTimer()
+    AcApDiffSettingsDialog.dismiss()
     AcApI18n.events.localeChanged.removeEventListener(this.handleLocaleChanged)
     document.removeEventListener('pointerdown', this.handleDocumentPointerDown)
+    this.resultsBody.removeEventListener('scroll', this.handleDiffPopoverDismiss)
+    window.removeEventListener('resize', this.handleDiffPopoverDismiss)
+    this.hideDiffPopover(true)
+    this.unbindViewSyncListeners()
     for (const timer of this.bannerTimers.values()) {
       window.clearTimeout(timer)
     }
@@ -545,29 +759,49 @@ export class AcApDiffViewer {
     modeGroup.className = 'ml-diff-toolbar-group'
     const btnSideBySide = document.createElement('button')
     btnSideBySide.type = 'button'
-    btnSideBySide.className = 'ml-diff-tool-btn'
+    btnSideBySide.className = 'ml-diff-tool-btn is-icon'
+    btnSideBySide.innerHTML = ICON_SIDE_BY_SIDE
     const btnOverlay = document.createElement('button')
     btnOverlay.type = 'button'
-    btnOverlay.className = 'ml-diff-tool-btn'
-    modeGroup.append(btnSideBySide, btnOverlay)
+    btnOverlay.className = 'ml-diff-tool-btn is-icon'
+    btnOverlay.innerHTML = ICON_OVERLAY
+    const btnSyncViews = document.createElement('button')
+    btnSyncViews.type = 'button'
+    btnSyncViews.className = 'ml-diff-tool-btn is-icon ml-diff-sync-btn'
+    btnSyncViews.innerHTML = ICON_SYNC_VIEWS
+    modeGroup.append(btnSideBySide, btnOverlay, btnSyncViews)
 
     const navGroup = document.createElement('div')
     navGroup.className = 'ml-diff-toolbar-group'
     const btnTogglePanel = document.createElement('button')
     btnTogglePanel.type = 'button'
-    btnTogglePanel.className = 'ml-diff-tool-btn'
+    btnTogglePanel.className = 'ml-diff-tool-btn is-icon'
+    btnTogglePanel.innerHTML = ICON_RESULTS_PANEL
     const btnPrev = document.createElement('button')
     btnPrev.type = 'button'
     btnPrev.className = 'ml-diff-tool-btn'
     btnPrev.textContent = '◀'
+    btnPrev.disabled = true
     const btnNext = document.createElement('button')
     btnNext.type = 'button'
     btnNext.className = 'ml-diff-tool-btn'
     btnNext.textContent = '▶'
+    btnNext.disabled = true
     navGroup.append(btnTogglePanel, btnPrev, btnNext)
 
     const markupGroup = document.createElement('div')
     markupGroup.className = 'ml-diff-toolbar-group'
+    const btnGenerateClouds = document.createElement('button')
+    btnGenerateClouds.type = 'button'
+    btnGenerateClouds.className = 'ml-diff-tool-btn is-icon'
+    btnGenerateClouds.dataset.labelKey = 'markupGenerateClouds'
+    btnGenerateClouds.disabled = true
+    btnGenerateClouds.innerHTML = ICON_COMPARE_CLOUDS
+    btnGenerateClouds.addEventListener('click', () => {
+      void this.generateCompareCloudMarkups()
+    })
+    this.markupButtons.push(btnGenerateClouds)
+    markupGroup.appendChild(btnGenerateClouds)
     for (const tool of MARKUP_TOOLS) {
       const btn = document.createElement('button')
       btn.type = 'button'
@@ -581,14 +815,42 @@ export class AcApDiffViewer {
       this.markupButtons.push(btn)
       markupGroup.appendChild(btn)
     }
+    const btnMarkupVis = document.createElement('button')
+    btnMarkupVis.type = 'button'
+    btnMarkupVis.className = 'ml-diff-tool-btn is-icon'
+    btnMarkupVis.addEventListener('click', () => {
+      this.toggleMarkupVisibility()
+    })
+    markupGroup.appendChild(btnMarkupVis)
+    const btnClearMarkups = document.createElement('button')
+    btnClearMarkups.type = 'button'
+    btnClearMarkups.className = 'ml-diff-tool-btn is-icon'
+    btnClearMarkups.dataset.labelKey = 'markupClear'
+    btnClearMarkups.innerHTML = ICON_CLEAR_MARKUPS
+    btnClearMarkups.addEventListener('click', () => {
+      void this.clearAllMarkups()
+    })
+    this.markupButtons.push(btnClearMarkups)
+    markupGroup.appendChild(btnClearMarkups)
 
     const localeChrome = this.createLanguageSelect()
+    const btnSettings = document.createElement('button')
+    btnSettings.type = 'button'
+    btnSettings.className = 'ml-diff-tool-btn is-icon'
+    btnSettings.innerHTML = ICON_SETTINGS
+    const btnTheme = document.createElement('button')
+    btnTheme.type = 'button'
+    btnTheme.className = 'ml-diff-tool-btn is-icon'
+    localeChrome.group.prepend(btnSettings, btnTheme)
 
     btnSideBySide.addEventListener('click', () => {
       void this.setViewMode('side-by-side')
     })
     btnOverlay.addEventListener('click', () => {
       void this.setViewMode('overlay')
+    })
+    btnSyncViews.addEventListener('click', () => {
+      this.setViewsSynced(!this.viewsSynced)
     })
     btnTogglePanel.addEventListener('click', () => {
       this.setSidePanelOpen(!this.sidePanelOpen)
@@ -598,6 +860,12 @@ export class AcApDiffViewer {
     })
     btnNext.addEventListener('click', () => {
       void this.goToDifference(1)
+    })
+    btnSettings.addEventListener('click', () => {
+      void this.openSettings()
+    })
+    btnTheme.addEventListener('click', () => {
+      this.setUiTheme(this.uiTheme === 'dark' ? 'light' : 'dark')
     })
 
     const sidePanel = document.createElement('aside')
@@ -664,9 +932,15 @@ export class AcApDiffViewer {
       toolbarChildren: [modeGroup, navGroup, markupGroup, localeChrome.group],
       btnSideBySide,
       btnOverlay,
+      btnSyncViews,
       btnTogglePanel,
       btnPrev,
       btnNext,
+      btnSettings,
+      btnGenerateClouds,
+      btnMarkupVis,
+      btnClearMarkups,
+      btnTheme,
       sidePanel,
       resultsBody,
       markupsBody,
@@ -757,12 +1031,16 @@ export class AcApDiffViewer {
       })
   }
 
-  /** Closes the language menu when clicking outside it. */
+  /** Closes the language menu and unpinned diff popover when clicking outside. */
   private handleDocumentPointerDown = (event: PointerEvent) => {
-    if (!this.localeMenuOpen) return
     if (!(event.target instanceof Node)) return
-    if (this.localeSelectHost.contains(event.target)) return
-    this.setLocaleMenuOpen(false)
+    if (this.localeMenuOpen && !this.localeSelectHost.contains(event.target)) {
+      this.setLocaleMenuOpen(false)
+    }
+    if (!this.diffPopoverPinned) return
+    if (this.diffPopover.contains(event.target)) return
+    if (this.diffPopoverAnchor?.contains(event.target)) return
+    this.hideDiffPopover(true)
   }
 
   /**
@@ -812,8 +1090,13 @@ export class AcApDiffViewer {
     slot.append(canvas, empty, banner)
     pane.append(header, slot)
 
+    pane.addEventListener('pointerenter', () => {
+      this.activateSideOnHover(side)
+    })
     pane.addEventListener('pointerdown', () => {
-      void this.activateSide(side)
+      this.lastPointerSide = side
+      this.applyFocusClass(side)
+      void this.activateSideAndResumeMarkup(side)
     })
     pane.addEventListener('click', event => {
       if (this.documentFor(side)) return
@@ -864,6 +1147,50 @@ export class AcApDiffViewer {
     }
   }
 
+  /**
+   * Activates `side` when the pointer enters the pane in side-by-side mode.
+   *
+   * If a markup command is already running on the other pane, it is cancelled
+   * by document activation and restarted on this pane so the tool follows
+   * the pointer.
+   */
+  private activateSideOnHover(side: AcApDiffViewerSide) {
+    if (this.disposed) return
+    if (this.viewMode !== 'side-by-side') return
+    this.lastPointerSide = side
+    this.applyFocusClass(side)
+    void this.activateSideAndResumeMarkup(side)
+  }
+
+  /**
+   * Makes `side` the command target. When a markup tool is in progress on the
+   * other document, re-issues it after the switch so drawing can continue here.
+   */
+  private async activateSideAndResumeMarkup(side: AcApDiffViewerSide) {
+    if (this.disposed) return
+    if (!this.documentFor(side)) return
+    let resume: string | undefined
+    try {
+      const mgr = requireInstance()
+      if (
+        mgr.commandManager.activeCommand &&
+        this.lastMarkupCommand &&
+        mgr.curDocument !== this.documentFor(side)
+      ) {
+        resume = this.lastMarkupCommand
+      }
+    } catch {
+      return
+    }
+    const ok = await this.activateSide(side)
+    if (!ok || this.disposed) return
+    if (this.lastPointerSide !== side) return
+    this.applyFocusClass(side)
+    if (resume) {
+      requireInstance().sendStringToExecute(resume)
+    }
+  }
+
   /** Opens the hidden file picker for `side`. */
   private pickFile(side: AcApDiffViewerSide) {
     this.uiFor(side).fileInput.click()
@@ -890,38 +1217,303 @@ export class AcApDiffViewer {
    */
   private async runMarkupCommand(command: string) {
     const mgr = requireInstance()
-    const side = this.activeSide
+    const side =
+      this.viewMode === 'side-by-side' ? this.lastPointerSide : 'left'
     if (!this.documentFor(side)) return
-    await this.activateSide(side)
+    this.lastMarkupCommand = command
+    const ok = await this.activateSide(side)
+    if (!ok) return
+    this.applyFocusClass(side)
     mgr.sendStringToExecute(command)
+  }
+
+  /**
+   * Creates built-in markup clouds around the current compare change sets.
+   *
+   * Overlay mode commits every set onto the left drawing. Side-by-side commits
+   * left-hit sets on the left pane and right-hit sets on the right pane.
+   * Clouds previously generated this way are replaced.
+   */
+  private async generateCompareCloudMarkups() {
+    if (this.disposed) return
+    const sets = this.compareResult?.changeSets
+    if (!sets?.length) return
+    const overlay = this.viewMode === 'overlay'
+    if (overlay) {
+      await this.commitChangeSetClouds('left', sets)
+    } else {
+      await this.commitChangeSetClouds(
+        'left',
+        sets.filter(set => set.hasLeft)
+      )
+      await this.commitChangeSetClouds(
+        'right',
+        sets.filter(set => set.hasRight)
+      )
+    }
+    if (!this.disposed) this.refreshMarkupsList()
+  }
+
+  /**
+   * Shows or hides markup overlays on every open pane.
+   *
+   * The session flag in cad-simple-viewer is global; both canvases are
+   * updated so side-by-side views stay in sync.
+   */
+  private toggleMarkupVisibility() {
+    if (this.disposed) return
+    if (!this.leftDocument && !this.rightDocument) return
+    this.applyMarkupVisibility(!isMarkupVisible())
+    this.syncMarkupVisibilityButton()
+  }
+
+  /**
+   * Applies markup-layer visibility to each pane that currently has a drawing.
+   *
+   * @param visible - Whether committed and live markup overlays should show.
+   */
+  private applyMarkupVisibility(visible: boolean) {
+    if (this.leftDocument) {
+      setMarkupVisible(this.viewFor('left'), visible)
+    }
+    if (this.rightDocument) {
+      setMarkupVisible(this.viewFor('right'), visible)
+    }
+  }
+
+  /**
+   * Clears Design Review markups on both open drawings (current layout).
+   */
+  private async clearAllMarkups() {
+    if (this.disposed) return
+    for (const side of ['left', 'right'] as const) {
+      if (!this.documentFor(side)) continue
+      const ok = await this.activateSide(side)
+      if (!ok || this.disposed) continue
+      const view = this.viewFor(side)
+      getMarkupPresenter().clearLayout(view, view.activeLayoutBtrId, {
+        clearStore: true
+      })
+    }
+    if (!this.disposed) this.refreshMarkupsList()
+  }
+
+  /**
+   * Replaces previous compare-generated clouds on `side` with one markup
+   * cloud per change set.
+   *
+   * @param side - Document session that receives the clouds.
+   * @param sets - Change sets whose extents become cloud AABBs.
+   */
+  private async commitChangeSetClouds(
+    side: AcApDiffViewerSide,
+    sets: readonly AcApDiffChangeSet[]
+  ) {
+    const ok = await this.activateSide(side)
+    if (!ok || this.disposed) return
+    const mgr = requireInstance()
+    const view = this.viewFor(side)
+    const context = mgr.context
+    runMarkupEdit(view, 'Create Markup', () => {
+      const store = getMarkupStore()
+      const presenter = getMarkupPresenter()
+      for (const record of store.list()) {
+        if (record.type !== 'cloud' || record.comment !== COMPARE_CLOUD_COMMENT) {
+          continue
+        }
+        presenter.unpublish(view, record.id, { keepInStore: true })
+        store.removeRecord(record.id)
+      }
+      for (const set of sets) {
+        const box = set.extents
+        if (box.maxX <= box.minX && box.maxY <= box.minY) continue
+        const meta = createMarkupMeta('cloud', view, context, {
+          comment: COMPARE_CLOUD_COMMENT
+        })
+        const color = acapDiffColorToCssHex(
+          this.colors[acapChangeSetCloudRole(set)]
+        )
+        const record: AcApMarkupRecord = {
+          ...meta,
+          type: 'cloud',
+          style: { ...meta.style, color },
+          geometry: {
+            type: 'cloud',
+            corner1: { x: box.minX, y: box.minY },
+            corner2: { x: box.maxX, y: box.maxY }
+          }
+        }
+        store.upsert(record)
+        presenter.publish(view, record)
+      }
+    })
+  }
+
+  /**
+   * Opens the compare settings dialog. Edits preview live; Cancel restores
+   * the colors and COMPARE sysvars that were in effect when the dialog opened.
+   */
+  private async openSettings() {
+    if (this.disposed) return
+    const snapshotColors = { ...this.colors }
+    const snapshotVars = { ...this.sessionSysVars }
+    const result = await AcApDiffSettingsDialog.open({
+      host: document.body,
+      theme: this.uiTheme,
+      colors: this.colors,
+      sysVars: this.sessionSysVars,
+      onChange: draft => {
+        if (this.disposed) return
+        this.applyCompareColors(draft.colors)
+        const varsChanged =
+          JSON.stringify(draft.sysVars) !== JSON.stringify(this.sessionSysVars)
+        if (varsChanged) this.scheduleCompareSysVars(draft.sysVars)
+      }
+    })
+    if (this.disposed) return
+    if (!result.confirmed) {
+      this.applyCompareColors(snapshotColors)
+      this.flushCompareSysVars(snapshotVars)
+      return
+    }
+    this.flushCompareSysVars(result.sysVars)
+  }
+
+  /**
+   * Adopts COMPARE sysvars after a pane opens a drawing.
+   *
+   * Drawing-saved variables are read from the new file when the other pane is
+   * empty. When a comparison is already in progress, the current session is
+   * written onto the new drawing so both panes stay in sync.
+   *
+   * @param doc - Newly opened document.
+   * @param otherIsOpen - True when the opposite pane already has a drawing.
+   */
+  private adoptCompareSysVarsAfterOpen(doc: AcApDocument, otherIsOpen: boolean) {
+    if (!otherIsOpen) {
+      this.sessionSysVars = acapReadCompareSysVars(doc.database)
+    }
+    acapWriteCompareSysVars(this.sessionSysVars, [doc.database])
+  }
+
+  /** Cancels a pending Settings sysvar preview timer. */
+  private clearSysVarPreviewTimer() {
+    if (!this.sysVarPreviewTimer) return
+    window.clearTimeout(this.sysVarPreviewTimer)
+    this.sysVarPreviewTimer = 0
+  }
+
+  /**
+   * Debounces COMPARE sysvar live preview so slider drags do not re-compare
+   * (and re-register the overlay) on every tick.
+   *
+   * @param sysVars - Draft values from the settings dialog.
+   */
+  private scheduleCompareSysVars(sysVars: AcApDiffCompareSysVars) {
+    this.clearSysVarPreviewTimer()
+    const next = { ...sysVars }
+    this.sysVarPreviewTimer = window.setTimeout(() => {
+      this.sysVarPreviewTimer = 0
+      if (this.disposed) return
+      this.applyCompareSysVars(next)
+    }, COMPARE_SYSVAR_PREVIEW_MS)
+  }
+
+  /**
+   * Applies COMPARE sysvars immediately, dropping any pending preview timer.
+   *
+   * @param sysVars - Values to persist (OK flush or Cancel restore).
+   */
+  private flushCompareSysVars(sysVars: AcApDiffCompareSysVars) {
+    this.clearSysVarPreviewTimer()
+    this.applyCompareSysVars(sysVars)
+  }
+
+  /**
+   * Persists COMPARE sysvars onto open drawings and re-runs the comparison.
+   *
+   * @param sysVars - Session values to apply.
+   */
+  private applyCompareSysVars(sysVars: AcApDiffCompareSysVars) {
+    const unchanged =
+      JSON.stringify(sysVars) === JSON.stringify(this.sessionSysVars)
+    this.sessionSysVars = { ...sysVars }
+    const dbs = [this.leftDocument?.database, this.rightDocument?.database].filter(
+      (db): db is NonNullable<typeof db> => db != null
+    )
+    acapWriteCompareSysVars(this.sessionSysVars, dbs)
+    if (!unchanged) void this.runCompareAndApply()
+  }
+
+  /**
+   * Writes compare colors onto the widget and re-tints open drawings.
+   *
+   * @param colors - Full role-color set to apply.
+   */
+  private applyCompareColors(colors: Required<AcApCompareDisplayColors>) {
+    this.colors = { ...colors }
+    this.syncCompareColorVars()
+    void this.applyCompareDisplay()
+  }
+
+  /** Pushes role colors onto CSS custom properties used by the results list. */
+  private syncCompareColorVars() {
+    this.root.style.setProperty(
+      '--ml-diff-added',
+      acapDiffColorToCssHex(this.colors.added)
+    )
+    this.root.style.setProperty(
+      '--ml-diff-deleted',
+      acapDiffColorToCssHex(this.colors.deleted)
+    )
+    this.root.style.setProperty(
+      '--ml-diff-modified',
+      acapDiffColorToCssHex(this.colors.modified)
+    )
   }
 
   /** Compares both panes when they have drawings, then applies display coloring. */
   private async runCompareAndApply() {
+    const seq = ++this.compareSeq
     const left = this.leftDocument
     const right = this.rightDocument
     if (!left || !right) {
       this.compareResult = undefined
       this.navIndex = -1
       await this.clearCompareDisplay()
+      if (this.disposed || seq !== this.compareSeq) return
       this.renderResultsList()
+      this.syncToolbarButtons()
       return
     }
-    this.compareResult = acapCompareDrawings(left.database, right.database)
+    const result = acapCompareDrawings(left.database, right.database, {
+      compareProps: this.sessionSysVars.compareprops,
+      compareHatch: this.sessionSysVars.comparehatch,
+      compareText: this.sessionSysVars.comparetext,
+      compareTolerance: this.sessionSysVars.comparetolerance,
+      compareRcMargin: this.sessionSysVars.comparercmargin
+    })
+    if (this.disposed || seq !== this.compareSeq) return
+    this.compareResult = result
     this.navIndex = -1
     this.options.events?.compared?.(this.compareResult)
     if (this.viewMode === 'overlay') {
       await this.enterOverlayMode()
     }
+    if (this.disposed || seq !== this.compareSeq) return
     await this.applyCompareDisplay()
+    if (this.disposed || seq !== this.compareSeq) return
     this.renderResultsList()
     this.refreshMarkupsList()
+    this.syncToolbarButtons()
   }
 
   /** Registers the right drawing as an overlay on the left canvas, hides the right pane, and focuses the left view. */
   private async enterOverlayMode() {
+    this.lastPointerSide = 'left'
     const mgr = requireInstance()
     const right = this.rightDocument
+    const seq = ++this.overlayRegisterSeq
     if (!right) {
       this.viewMode = 'overlay'
       this.syncViewModeUi()
@@ -933,9 +1525,18 @@ export class AcApDiffViewer {
       this.overlayId = undefined
     }
     // Re-convert right DB into left canvas as overlay (do not move scenes)
-    this.overlayId = await mgr.registerOverlayDatabase(right.database, {
+    const overlayId = await mgr.registerOverlayDatabase(right.database, {
       targetView: mgr.mainView
     })
+    if (this.disposed || seq !== this.overlayRegisterSeq) {
+      try {
+        mgr.removeOverlay(overlayId)
+      } catch {
+        // A newer call may already have replaced this registration.
+      }
+      return
+    }
+    this.overlayId = overlayId
     this.rightUi.pane.style.display = 'none'
     this.root.classList.add('is-overlay')
     await this.activateSide('left')
@@ -946,6 +1547,7 @@ export class AcApDiffViewer {
    * Does not change {@link viewMode}; callers that switch mode assign it themselves.
    */
   private async exitOverlayMode() {
+    this.overlayRegisterSeq++
     const mgr = requireInstance()
     if (this.overlayId) {
       mgr.removeOverlay(this.overlayId)
@@ -953,6 +1555,19 @@ export class AcApDiffViewer {
     }
     this.rightUi.pane.style.display = ''
     this.root.classList.remove('is-overlay')
+  }
+
+  /**
+   * Waits until left/right canvases finish entity conversion so compare
+   * role overrides can bind to packed geometry slots.
+   */
+  private async waitForCompareViewsIdle() {
+    const mgr = requireInstance()
+    const views: AcTrView2d[] = [mgr.mainView]
+    if (mgr.splitView) {
+      views.push(mgr.splitView)
+    }
+    await Promise.all(views.map(view => view.waitUntilIdle()))
   }
 
   /** Turns off compare coloring on both canvases and any overlay. */
@@ -980,6 +1595,20 @@ export class AcApDiffViewer {
       return
     }
 
+    // Open returns after the database is parsed, but Three.js conversion
+    // is still draining. Role tints look up packed slots; applying before
+    // those slots exist leaves added/deleted hits (often the last handles)
+    // on the unchanged base color.
+    await this.waitForCompareViewsIdle()
+    if (
+      this.disposed ||
+      this.compareResult !== result ||
+      !this.leftDocument ||
+      !this.rightDocument
+    ) {
+      return
+    }
+
     const base: AcApCompareDisplayOptions = {
       enabled: true,
       baseColor: this.colors.unchanged,
@@ -990,10 +1619,17 @@ export class AcApDiffViewer {
       }
     }
 
+    const deletedIds = result.deleted
+      .filter(h => h.side === 'left')
+      .map(h => h.objectId)
+    const addedIds = result.added
+      .filter(h => h.side === 'right')
+      .map(h => h.objectId)
+
     if (this.viewMode === 'overlay') {
       const leftOverrides = [
-        ...result.deleted.map(h => ({
-          objectId: h.objectId,
+        ...deletedIds.map(objectId => ({
+          objectId,
           role: 'deleted' as const
         })),
         ...result.modified
@@ -1001,16 +1637,22 @@ export class AcApDiffViewer {
           .map(h => ({ objectId: h.objectId, role: 'deleted' as const }))
       ]
       const rightOverrides = [
-        ...result.added.map(h => ({
-          objectId: h.objectId,
+        ...addedIds.map(objectId => ({
+          objectId,
           role: 'added' as const
         })),
         ...result.modified
           .filter(h => h.side === 'right')
           .map(h => ({ objectId: h.objectId, role: 'added' as const }))
       ]
+      mgr.setCompareDisplay({ enabled: false }, mgr.mainView)
       mgr.setCompareDisplay({ ...base, overrides: leftOverrides }, mgr.mainView)
       if (this.overlayId) {
+        mgr.setOverlayCompareDisplay(
+          this.overlayId,
+          { enabled: false },
+          mgr.mainView
+        )
         mgr.setOverlayCompareDisplay(
           this.overlayId,
           { ...base, overrides: rightOverrides },
@@ -1021,8 +1663,8 @@ export class AcApDiffViewer {
     }
 
     const leftOverrides = [
-      ...result.deleted.map(h => ({
-        objectId: h.objectId,
+      ...deletedIds.map(objectId => ({
+        objectId,
         role: 'deleted' as const
       })),
       ...result.modified
@@ -1033,8 +1675,8 @@ export class AcApDiffViewer {
         }))
     ]
     const rightOverrides = [
-      ...result.added.map(h => ({
-        objectId: h.objectId,
+      ...addedIds.map(objectId => ({
+        objectId,
         role: 'added' as const
       })),
       ...result.modified
@@ -1044,8 +1686,10 @@ export class AcApDiffViewer {
           role: 'modified' as const
         }))
     ]
+    mgr.setCompareDisplay({ enabled: false }, mgr.mainView)
     mgr.setCompareDisplay({ ...base, overrides: leftOverrides }, mgr.mainView)
     if (mgr.splitView) {
+      mgr.setCompareDisplay({ enabled: false }, mgr.splitView)
       mgr.setCompareDisplay(
         { ...base, overrides: rightOverrides },
         mgr.splitView
@@ -1054,12 +1698,14 @@ export class AcApDiffViewer {
   }
 
   /**
-   * Zooms to a hit (and its pair, when modified) and highlights the entities.
+   * Zooms to a hit (and its pair, when modified).
+   *
+   * Drawing entities are not selected or highlighted; compare display
+   * already tints deleted / added / modified geometry.
    *
    * @param hit - Navigation entry from {@link AcApDiffCompareResult}.
    */
   private async focusHit(hit: AcApDiffEntityHit) {
-    const mgr = requireInstance()
     const side: AcApDiffViewerSide =
       this.viewMode === 'overlay' ? 'left' : hit.side
     if (this.viewMode !== 'overlay') {
@@ -1081,14 +1727,16 @@ export class AcApDiffViewer {
       }
       view.zoomTo(box, 1.5)
     }
-    const ids = [hit.objectId]
-    if (hit.pairedId) ids.push(hit.pairedId)
-    mgr.mainView.highlight(ids)
-    mgr.splitView?.highlight(ids)
+    if (this.isViewSyncActive()) {
+      this.viewSyncLeader = side
+      this.viewSyncFollowOpen = false
+      this.copyVisibleView(side, side === 'left' ? 'right' : 'left')
+    }
   }
 
   /** Rebuilds the results list from {@link compareResult}. */
   private renderResultsList() {
+    this.hideDiffPopover(true)
     const body = this.resultsBody
     body.replaceChildren()
     const result = this.compareResult
@@ -1097,6 +1745,7 @@ export class AcApDiffViewer {
       empty.className = 'ml-diff-empty-list'
       empty.textContent = acapDiffViewerT('noResults')
       body.appendChild(empty)
+      this.syncToolbarButtons()
       return
     }
 
@@ -1127,36 +1776,234 @@ export class AcApDiffViewer {
     }
 
     for (const [key, hits] of groups) {
-      const group = document.createElement('div')
+      const storageKey = this.resultGroupStorageKey(key)
+      const group = document.createElement('details')
       group.className = 'ml-diff-group'
-      const title = document.createElement('div')
+      group.open = !this.collapsedResultGroups.has(storageKey)
+      const title = document.createElement('summary')
       title.className = 'ml-diff-group-title'
       title.textContent =
         this.resultGroupMode === 'kind'
           ? `${kindLabel(key as AcApDiffChangeKind)} (${hits.length})`
           : `${key} (${hits.length})`
       group.appendChild(title)
+      group.addEventListener('toggle', () => {
+        if (group.open) this.collapsedResultGroups.delete(storageKey)
+        else this.collapsedResultGroups.add(storageKey)
+        this.hideDiffPopover(true)
+      })
       hits.forEach(hit => {
+        const row = document.createElement('div')
+        row.className = 'ml-diff-result-row'
+        row.dataset.kind = hit.kind
+        const navIdx = result.navigation.indexOf(hit)
+        if (navIdx === this.navIndex) row.classList.add('is-active')
+
         const btn = document.createElement('button')
         btn.type = 'button'
         btn.className = 'ml-diff-result-item'
         btn.dataset.kind = hit.kind
-        const navIdx = result.navigation.indexOf(hit)
-        if (navIdx === this.navIndex) btn.classList.add('is-active')
-        btn.textContent = `${hit.dxfType} · ${hit.objectId}`
+        const label = document.createElement('span')
+        label.className = 'ml-diff-result-label'
+        label.textContent = `${hit.dxfType} · ${hit.objectId}`
         const meta = document.createElement('span')
         meta.className = 'ml-diff-result-meta'
         meta.textContent = `${hit.layer} · ${kindLabel(hit.kind)}`
-        btn.appendChild(meta)
+        btn.append(label, meta)
         btn.addEventListener('click', () => {
           this.navIndex = navIdx >= 0 ? navIdx : this.navIndex
           void this.focusHit(hit)
           this.renderResultsList()
         })
-        group.appendChild(btn)
+        row.appendChild(btn)
+
+        if (hit.kind === 'modified') {
+          const info = document.createElement('button')
+          info.type = 'button'
+          info.className = 'ml-diff-result-info'
+          info.innerHTML = ICON_INFO
+          const detailsLabel = acapDiffViewerT('diffDetails')
+          info.setAttribute('aria-label', detailsLabel)
+          info.setAttribute('aria-expanded', 'false')
+          info.addEventListener('click', event => {
+            event.preventDefault()
+            event.stopPropagation()
+            this.toggleDiffPopover(info, hit)
+          })
+          info.addEventListener('mouseenter', () => {
+            this.showDiffPopover(info, hit, false)
+          })
+          info.addEventListener('mouseleave', this.scheduleDiffPopoverHide)
+          row.appendChild(info)
+        }
+
+        group.appendChild(row)
       })
       body.appendChild(group)
     }
+    this.syncToolbarButtons()
+  }
+
+  /** Pins or unpins the field-diff popover for a modified result row. */
+  private toggleDiffPopover(anchor: HTMLButtonElement, hit: AcApDiffEntityHit) {
+    if (this.diffPopoverAnchor === anchor && this.diffPopoverPinned) {
+      this.hideDiffPopover(true)
+      return
+    }
+    this.showDiffPopover(anchor, hit, true)
+  }
+
+  /**
+   * Shows field-level old/new values next to `anchor`.
+   *
+   * @param pinned - When true, the popover stays until dismissed.
+   */
+  private showDiffPopover(
+    anchor: HTMLButtonElement,
+    hit: AcApDiffEntityHit,
+    pinned: boolean
+  ) {
+    if (
+      !pinned &&
+      this.diffPopoverPinned &&
+      this.diffPopoverAnchor !== anchor
+    ) {
+      return
+    }
+    this.cancelDiffPopoverHide()
+    if (
+      !pinned &&
+      this.diffPopoverPinned &&
+      this.diffPopoverAnchor === anchor &&
+      !this.diffPopover.hidden
+    ) {
+      return
+    }
+    this.diffPopoverAnchor?.classList.remove('is-open')
+    this.diffPopoverAnchor = anchor
+    this.diffPopoverPinned = pinned
+    anchor.classList.toggle('is-open', pinned)
+    anchor.setAttribute('aria-expanded', String(pinned))
+    this.renderDiffPopoverContent(hit)
+    this.positionDiffPopover(anchor)
+    this.diffPopover.hidden = false
+  }
+
+  /** Hides the field-diff popover. Pass `true` to also clear a pinned state. */
+  private hideDiffPopover(force = false) {
+    if (this.diffPopoverPinned && !force) return
+    this.cancelDiffPopoverHide()
+    this.diffPopover.hidden = true
+    this.diffPopoverPinned = false
+    this.diffPopoverAnchor?.classList.remove('is-open')
+    this.diffPopoverAnchor?.setAttribute('aria-expanded', 'false')
+    this.diffPopoverAnchor = undefined
+  }
+
+  private handleDiffPopoverDismiss = () => {
+    this.hideDiffPopover(true)
+  }
+
+  private cancelDiffPopoverHide = () => {
+    if (this.diffPopoverHideTimer) {
+      window.clearTimeout(this.diffPopoverHideTimer)
+      this.diffPopoverHideTimer = 0
+    }
+  }
+
+  private scheduleDiffPopoverHide = () => {
+    if (this.diffPopoverPinned) return
+    this.cancelDiffPopoverHide()
+    this.diffPopoverHideTimer = window.setTimeout(() => {
+      this.diffPopoverHideTimer = 0
+      this.hideDiffPopover(false)
+    }, 180)
+  }
+
+  /** Fills {@link diffPopover} with a property / old / new table. */
+  private renderDiffPopoverContent(hit: AcApDiffEntityHit) {
+    const pop = this.diffPopover
+    pop.replaceChildren()
+    const changes = hit.changes ?? []
+    const tableChanges = changes.filter(
+      change => change.field !== 'geometry' || change.oldValue || change.newValue
+    )
+    const geometryOnly =
+      tableChanges.length === 0 &&
+      changes.some(change => change.field === 'geometry')
+
+    if (geometryOnly || tableChanges.length === 0) {
+      const note = document.createElement('div')
+      note.className = 'ml-diff-change-note'
+      note.textContent = acapDiffViewerT('diffGeometryChanged')
+      pop.appendChild(note)
+      return
+    }
+
+    const table = document.createElement('table')
+    table.className = 'ml-diff-change-table'
+    const thead = document.createElement('thead')
+    const headRow = document.createElement('tr')
+    for (const key of ['diffColProperty', 'diffColOld', 'diffColNew'] as const) {
+      const th = document.createElement('th')
+      th.textContent = acapDiffViewerT(key)
+      headRow.appendChild(th)
+    }
+    thead.appendChild(headRow)
+    const tbody = document.createElement('tbody')
+    for (const change of tableChanges) {
+      const tr = document.createElement('tr')
+      const th = document.createElement('th')
+      th.scope = 'row'
+      th.textContent = diffFieldLabel(change.field)
+      const tdOld = document.createElement('td')
+      tdOld.className = 'ml-diff-change-old'
+      tdOld.textContent = formatDiffValue(change.field, change.oldValue)
+      const tdNew = document.createElement('td')
+      tdNew.className = 'ml-diff-change-new'
+      tdNew.textContent = formatDiffValue(change.field, change.newValue)
+      tr.append(th, tdOld, tdNew)
+      tbody.appendChild(tr)
+    }
+    table.append(thead, tbody)
+    pop.appendChild(table)
+  }
+
+  /** Places the popover beside `anchor`, flipping when it would overflow. */
+  private positionDiffPopover(anchor: HTMLButtonElement) {
+    const pop = this.diffPopover
+    pop.style.left = '0px'
+    pop.style.top = '0px'
+    pop.hidden = false
+    const a = anchor.getBoundingClientRect()
+    const p = pop.getBoundingClientRect()
+    const gap = 8
+    let left = a.left - p.width - gap
+    let top = a.top
+    if (left < gap) {
+      left = Math.max(gap, a.right - p.width)
+      top = a.bottom + gap
+    }
+    if (left + p.width > window.innerWidth - gap) {
+      left = Math.max(gap, window.innerWidth - p.width - gap)
+    }
+    if (top + p.height > window.innerHeight - gap) {
+      top = Math.max(gap, window.innerHeight - p.height - gap)
+    }
+    pop.style.left = `${left}px`
+    pop.style.top = `${top}px`
+  }
+
+  /** Storage key for a results-list section in the current grouping mode. */
+  private resultGroupStorageKey(groupKey: string): string {
+    return `${this.resultGroupMode}:${groupKey}`
+  }
+
+  /** Storage key of the section that contains `hit`. */
+  private resultGroupStorageKeyForHit(hit: AcApDiffEntityHit): string {
+    const groupKey =
+      this.resultGroupMode === 'kind' ? hit.kind : hit.dxfType || 'UNKNOWN'
+    return this.resultGroupStorageKey(groupKey)
   }
 
   /** Rebuilds the markups list from both document sessions. */
@@ -1286,15 +2133,180 @@ export class AcApDiffViewer {
   }
 
   /**
-   * Returns the canvas that should receive convert/highlight for `side`.
+   * Returns the canvas that should receive convert for `side`.
    *
    * Creates the split view on first use of the right pane.
    */
   private viewFor(side: AcApDiffViewerSide): AcTrView2d {
     const mgr = requireInstance()
-    return side === 'left'
-      ? mgr.mainView
-      : mgr.ensureSplitView(this.rightUi.canvas)
+    const view =
+      side === 'left'
+        ? mgr.mainView
+        : mgr.ensureSplitView(this.rightUi.canvas)
+    this.disableEntitySelection(view)
+    return view
+  }
+
+  /** Turns off CAD entity pick, selection, and hover highlight on `view`. */
+  private disableEntitySelection(view: AcTrView2d) {
+    view.entitySelectionEnabled = false
+  }
+
+  /** True when both panes should share the same camera. */
+  private isViewSyncActive(): boolean {
+    return (
+      this.viewsSynced &&
+      this.viewMode === 'side-by-side' &&
+      Boolean(this.leftDocument) &&
+      Boolean(this.rightDocument)
+    )
+  }
+
+  /** Turns pan/zoom locking on or off. */
+  private setViewsSynced(on: boolean) {
+    this.viewsSynced = on
+    this.viewSyncFollowOpen = false
+    if (on) {
+      const source = this.documentFor(this.lastPointerSide)
+        ? this.lastPointerSide
+        : 'left'
+      this.viewSyncLeader = source
+      this.applyViewSyncFromLeader()
+    }
+    this.syncViewModeUi()
+  }
+
+  /** Copies the leader pane's visible world box onto the follower. */
+  private applyViewSyncFromLeader() {
+    if (!this.isViewSyncActive()) return
+    const leader = this.documentFor(this.viewSyncLeader)
+      ? this.viewSyncLeader
+      : this.leftDocument
+        ? 'left'
+        : 'right'
+    this.viewSyncLeader = leader
+    this.copyVisibleView(leader, leader === 'left' ? 'right' : 'left')
+  }
+
+  /**
+   * After a pane opens, keep the already-open drawing's camera if sync is on.
+   * Auto-fit on the new pane is ignored until the user pans or zooms.
+   */
+  private syncFollowerAfterOpen(opened: AcApDiffViewerSide) {
+    const other: AcApDiffViewerSide = opened === 'left' ? 'right' : 'left'
+    if (!this.isViewSyncActive() || !this.documentFor(other)) return
+    this.viewSyncLeader = other
+    this.viewSyncFollowOpen = true
+    this.copyVisibleView(other, opened)
+  }
+
+  /** Subscribes to camera changes on both canvases. */
+  private bindViewSyncListeners() {
+    try {
+      const left = this.viewFor('left')
+      const right = this.viewFor('right')
+      left.events.viewChanged.addEventListener(this.handleLeftViewChanged)
+      right.events.viewChanged.addEventListener(this.handleRightViewChanged)
+    } catch {
+      return
+    }
+    for (const host of [this.leftUi.canvas, this.rightUi.canvas]) {
+      host.addEventListener('pointerdown', this.markViewSyncUserInput, true)
+      host.addEventListener('wheel', this.markViewSyncUserInput, {
+        capture: true,
+        passive: true
+      })
+    }
+  }
+
+  /** Drops camera-sync listeners. Safe if the manager is already gone. */
+  private unbindViewSyncListeners() {
+    for (const host of [this.leftUi.canvas, this.rightUi.canvas]) {
+      host.removeEventListener('pointerdown', this.markViewSyncUserInput, true)
+      host.removeEventListener('wheel', this.markViewSyncUserInput, true)
+    }
+    try {
+      const left = this.viewFor('left')
+      const right = this.viewFor('right')
+      left.events.viewChanged.removeEventListener(this.handleLeftViewChanged)
+      right.events.viewChanged.removeEventListener(this.handleRightViewChanged)
+    } catch {
+      // Manager may already be gone.
+    }
+  }
+
+  /** Marks the next camera change as coming from the user, not auto-fit. */
+  private markViewSyncUserInput = () => {
+    this.viewSyncFromUser = true
+  }
+
+  private handleLeftViewChanged = () => {
+    this.onPaneViewChanged('left')
+  }
+
+  private handleRightViewChanged = () => {
+    this.onPaneViewChanged('right')
+  }
+
+  /**
+   * Copies `source` onto the other pane. Programmatic zoom-to-fit on a newly
+   * opened follower is discarded so the already-open drawing keeps its camera.
+   */
+  private onPaneViewChanged(source: AcApDiffViewerSide) {
+    if (this.disposed || this.viewSyncLock || !this.isViewSyncActive()) return
+    const other: AcApDiffViewerSide = source === 'left' ? 'right' : 'left'
+    if (
+      this.viewSyncFollowOpen &&
+      source !== this.viewSyncLeader &&
+      !this.viewSyncFromUser
+    ) {
+      this.copyVisibleView(this.viewSyncLeader, source)
+      return
+    }
+    this.viewSyncFollowOpen = false
+    this.viewSyncFromUser = false
+    this.viewSyncLeader = source
+    this.copyVisibleView(source, other)
+  }
+
+  /**
+   * Copies the visible world box of `from` onto `to` without echoing back
+   * through {@link onPaneViewChanged}.
+   */
+  private copyVisibleView(from: AcApDiffViewerSide, to: AcApDiffViewerSide) {
+    if (from === to || this.viewSyncLock) return
+    if (!this.documentFor(from) || !this.documentFor(to)) return
+    let source: AcTrView2d
+    let target: AcTrView2d
+    try {
+      source = this.viewFor(from)
+      target = this.viewFor(to)
+    } catch {
+      return
+    }
+    const width = source.width
+    const height = source.height
+    if (width < 2 || height < 2) return
+    let box: AcGeBox2d
+    try {
+      const a = source.screenToWorld({ x: 0, y: 0 })
+      const b = source.screenToWorld({ x: width, y: height })
+      box = new AcGeBox2d()
+      box.expandByPoint(a)
+      box.expandByPoint(b)
+    } catch {
+      return
+    }
+    this.viewSyncLock = true
+    try {
+      target.zoomTo(box, 1)
+    } catch {
+      // Layout view may not exist yet on an empty pane.
+    } finally {
+      requestAnimationFrame(() => {
+        this.viewSyncLock = false
+      })
+    }
   }
 
   /**
@@ -1325,15 +2337,31 @@ export class AcApDiffViewer {
     this.rightDoc = right
     this.syncPaneChrome(this.leftUi, left)
     this.syncPaneChrome(this.rightUi, right)
+    this.syncFocusRings()
+    this.syncToolbarButtons()
+    window.dispatchEvent(new Event('resize'))
+  }
+
+  /**
+   * Sets `is-focused` immediately so the target pane's canvas receives
+   * pointer events. Unfocused canvases use `pointer-events: none`.
+   */
+  private applyFocusClass(side: AcApDiffViewerSide) {
+    this.leftUi.pane.classList.toggle('is-focused', side === 'left')
+    this.rightUi.pane.classList.toggle('is-focused', side === 'right')
+  }
+
+  /** Updates pane focus rings from the active document. */
+  private syncFocusRings() {
+    const right = this.rightDocument
     let active: AcApDocument | undefined
     try {
       active = requireInstance().curDocument
     } catch {
       active = undefined
     }
-    this.leftUi.pane.classList.toggle('is-focused', active === left)
-    this.rightUi.pane.classList.toggle('is-focused', active === right)
-    window.dispatchEvent(new Event('resize'))
+    if (active === right && right) this.applyFocusClass('right')
+    else this.applyFocusClass('left')
   }
 
   /**
@@ -1367,11 +2395,29 @@ export class AcApDiffViewer {
       this.viewMode === 'side-by-side'
     )
     this.btnOverlay.classList.toggle('is-active', this.viewMode === 'overlay')
-    this.btnSideBySide.textContent = acapDiffViewerT('toolbarSideBySide')
-    this.btnOverlay.textContent = acapDiffViewerT('toolbarOverlay')
-    this.btnTogglePanel.textContent = acapDiffViewerT('toolbarTogglePanel')
+    const sideBySideLabel = acapDiffViewerT('toolbarSideBySide')
+    const overlayLabel = acapDiffViewerT('toolbarOverlay')
+    const togglePanelLabel = acapDiffViewerT('toolbarTogglePanel')
+    this.btnSideBySide.title = sideBySideLabel
+    this.btnSideBySide.setAttribute('aria-label', sideBySideLabel)
+    this.btnOverlay.title = overlayLabel
+    this.btnOverlay.setAttribute('aria-label', overlayLabel)
+    const syncLabel = acapDiffViewerT('toolbarSyncViews')
+    this.btnSyncViews.title = syncLabel
+    this.btnSyncViews.setAttribute('aria-label', syncLabel)
+    this.btnSyncViews.setAttribute('aria-pressed', String(this.viewsSynced))
+    this.btnSyncViews.classList.toggle('is-active', this.viewsSynced)
+    this.btnSyncViews.hidden = this.viewMode !== 'side-by-side'
+    this.btnTogglePanel.title = togglePanelLabel
+    this.btnTogglePanel.setAttribute('aria-label', togglePanelLabel)
     this.btnPrev.title = acapDiffViewerT('toolbarPrev')
     this.btnNext.title = acapDiffViewerT('toolbarNext')
+    const settingsLabel = acapDiffViewerT('toolbarSettings')
+    this.btnSettings.title = settingsLabel
+    this.btnSettings.setAttribute('aria-label', settingsLabel)
+    this.syncToolbarButtons()
+    this.syncMarkupVisibilityButton()
+    this.syncThemeButton()
     this.syncLocaleSelect()
     for (const btn of this.markupButtons) {
       const key = btn.dataset.labelKey as Parameters<typeof acapDiffViewerT>[0]
@@ -1405,6 +2451,77 @@ export class AcApDiffViewer {
     // Hide group toolbar on markups tab
     const groupBar = this.groupByKindBtn.parentElement
     if (groupBar) groupBar.hidden = this.activeTab !== 'results'
+    if (!this.sidePanelOpen || this.activeTab !== 'results') {
+      this.hideDiffPopover(true)
+    }
+  }
+
+  /**
+   * Updates toolbar markup and diff-navigation controls from open documents
+   * and the latest compare result.
+   */
+  private syncToolbarButtons() {
+    const hasDoc = Boolean(this.leftDocument || this.rightDocument)
+    const compareDone = Boolean(this.compareResult)
+    const nav = this.compareResult?.navigation ?? []
+    const navReady = compareDone && nav.length > 0
+
+    this.btnMarkupVis.disabled = !hasDoc
+    this.btnClearMarkups.disabled = !hasDoc
+    for (const btn of this.markupButtons) {
+      if (btn.dataset.command) {
+        btn.disabled = !hasDoc
+      } else if (btn.dataset.labelKey === 'markupClear') {
+        btn.disabled = !hasDoc
+      } else if (btn.dataset.labelKey === 'markupGenerateClouds') {
+        btn.disabled =
+          !compareDone || (this.compareResult?.changeSets.length ?? 0) === 0
+      }
+    }
+
+    this.btnPrev.disabled = !navReady || this.navIndex <= 0
+    this.btnNext.disabled = !navReady || this.navIndex >= nav.length - 1
+  }
+
+  /**
+   * Applies UI chrome theme tokens and refreshes the toolbar theme button.
+   *
+   * @param theme - Target light or dark chrome theme.
+   */
+  private setUiTheme(theme: AcEdUiTheme) {
+    this.uiTheme = theme
+    acedApplyUiTheme(theme, this.root)
+    this.syncThemeButton()
+  }
+
+  /**
+   * Updates the markup visibility toggle icon and label (action: hide when
+   * shown, show when hidden).
+   */
+  private syncMarkupVisibilityButton() {
+    const visible = isMarkupVisible()
+    this.btnMarkupVis.innerHTML = visible
+      ? ICON_ANNOTATION_HIDE
+      : ICON_ANNOTATION_SHOW
+    const label = acapDiffViewerT(visible ? 'markupHide' : 'markupShow')
+    this.btnMarkupVis.title = label
+    this.btnMarkupVis.setAttribute('aria-label', label)
+    this.btnMarkupVis.setAttribute('aria-pressed', String(visible))
+    this.btnMarkupVis.classList.toggle('is-active', visible)
+  }
+
+  /**
+   * Shows the opposite-theme icon (sun in dark, moon in light), matching
+   * cad-viewer's status-bar theme button.
+   */
+  private syncThemeButton() {
+    const isDark = this.uiTheme === 'dark'
+    this.btnTheme.innerHTML = isDark ? ICON_THEME_SUNNY : ICON_THEME_MOON
+    const label = isDark
+      ? acapDiffViewerT('toolbarThemeDark')
+      : acapDiffViewerT('toolbarThemeLight')
+    this.btnTheme.title = label
+    this.btnTheme.setAttribute('aria-label', label)
   }
 
   /** Throws if {@link destroy} has already run. */

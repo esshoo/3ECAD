@@ -674,6 +674,10 @@ export default {
     firstPoint: 'İlk noktayı belirtin',
     secondPoint: 'İkinci noktayı belirtin'
   },
+  measureContinuous: {
+    firstPoint: 'İlk noktayı belirtin',
+    nextPoint: 'Sonraki noktayı belirtin (bitirmek için Enter\'a basın)'
+  },
   measurePoint: {
     point: 'Noktayı belirtin'
   },
@@ -730,7 +734,7 @@ export default {
       secondCorner: 'Vurgu dikdörtgeninin karşı köşesini belirtin'
     },
     callout: {
-      tip: 'Lider ucunu belirtin (ok ucu)',
+      tip: 'Lider ucunu veya çağrısı olmayan bulut/dikdörtgen/daire dış çerçevesini belirtin',
       anchor: 'Çağrı metninin konumunu belirtin',
       content: 'Çağrı metnini girin'
     },
@@ -1193,6 +1197,11 @@ export default {
         display: 'Önceki(Ö)',
         local: 'Önceki',
         global: 'Previous'
+      },
+      original: {
+        display: 'Orijinal(O)',
+        local: 'Orijinal',
+        global: 'Original'
       },
       scale: {
         display: 'Ölçek(Ö)',

@@ -13,7 +13,6 @@
       <ml-overflow-tabs
         v-model="store.dialogs.activePaletteTab"
         :tabs="tabs"
-        :more-tabs-label="t('main.toolPalette.moreTabs')"
       >
         <div
           v-if="store.dialogs.activePaletteTab === 'layerManager'"
@@ -36,6 +35,12 @@
           class="ml-design-review-wrapper"
         >
           <ml-design-review-palette />
+        </div>
+        <div
+          v-else-if="store.dialogs.activePaletteTab === 'measurements'"
+          class="ml-measurement-palette-wrapper"
+        >
+          <ml-measurement-palette />
         </div>
         <div
           v-else-if="store.dialogs.activePaletteTab === 'missingResources'"
@@ -85,7 +90,6 @@ import {
 } from '@mlightcad/ui-components'
 import { ElConfigProvider } from 'element-plus'
 import { computed, defineAsyncComponent, nextTick, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
 
 import { store } from '../../app'
 import { useSelectionSet, useViewerRect } from '../../composable'
@@ -95,6 +99,7 @@ import MlCountList from './MlCountList.vue'
 import MlDesignReviewPalette from './MlDesignReviewPalette.vue'
 import MlEntityProperties from './MlEntityProperties.vue'
 import MlLayerList from './MlLayerList.vue'
+import MlMeasurementPalette from './MlMeasurementPalette.vue'
 import MlMemoryProfile from './MlMemoryProfile.vue'
 import MlMissingResources from './MlMissingResources.vue'
 import MlOpenFileProfile from './MlOpenFileProfile.vue'
@@ -117,7 +122,6 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const { t } = useI18n()
 const containerRect = useViewerRect()
 
 const DEFAULT_WIDTH = 520
@@ -207,6 +211,7 @@ const baseTabNames = [
   'entityProperties',
   'countList',
   'designReview',
+  'measurements',
   'blocks',
   'missingResources',
   'memoryProfile'
@@ -297,6 +302,15 @@ const properties = computed(() => {
 }
 
 .ml-design-review-wrapper {
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ml-measurement-palette-wrapper {
   overflow: hidden;
   width: 100%;
   height: 100%;

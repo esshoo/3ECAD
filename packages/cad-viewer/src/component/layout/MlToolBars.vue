@@ -28,9 +28,12 @@ import {
   measureAngle,
   measureArc,
   measureArea,
+  measureContinuous,
   measureDistance,
+  measurementPanel,
   measurePoint,
   pan,
+  readingMode,
   revCircle,
   revCloud,
   revRect,
@@ -137,6 +140,12 @@ const verticalToolbarData = computed(() => {
       description: t('main.verticalToolbar.switchBg.description')
     },
     {
+      icon: readingMode,
+      text: t('main.verticalToolbar.readingMode.text'),
+      command: 'readingmode',
+      description: t('main.verticalToolbar.readingMode.description')
+    },
+    {
       icon: measure,
       text: t('main.verticalToolbar.measure.text'),
       command: '',
@@ -148,6 +157,12 @@ const verticalToolbarData = computed(() => {
           text: t('main.verticalToolbar.measureDistance.text'),
           command: 'measuredistance',
           description: t('main.verticalToolbar.measureDistance.description')
+        },
+        {
+          icon: measureContinuous,
+          text: t('main.verticalToolbar.measureContinuous.text'),
+          command: 'measurecontinuous',
+          description: t('main.verticalToolbar.measureContinuous.description')
         },
         {
           icon: measureAngle,
@@ -172,6 +187,12 @@ const verticalToolbarData = computed(() => {
           text: t('main.verticalToolbar.measurePoint.text'),
           command: 'measurepoint',
           description: t('main.verticalToolbar.measurePoint.description')
+        },
+        {
+          icon: measurementPanel,
+          text: t('main.verticalToolbar.measurementPanel.text'),
+          command: 'measurementpanel',
+          description: t('main.verticalToolbar.measurementPanel.description')
         },
         visibilityToggle(
           'measurementvis',

@@ -430,6 +430,11 @@ export default {
       text: 'Distance',
       description: 'Measures the distance between two points'
     },
+    measureContinuous: {
+      text: 'Continuous',
+      description:
+        'Measures chained distances by picking successive points until Enter or Cancel'
+    },
     measureAngle: {
       text: 'Angle',
       description:
@@ -446,6 +451,10 @@ export default {
     measurePoint: {
       text: 'Point',
       description: 'Measures the X/Y coordinates of a picked point'
+    },
+    measurementPanel: {
+      text: 'Panel',
+      description: 'Open the measurement palette'
     },
     clearMeasurements: {
       text: 'Clear',
@@ -473,7 +482,7 @@ export default {
         'Shifts the view without changing the viewing direction or magnification'
     },
     markupPanel: {
-      text: 'Review',
+      text: 'Panel',
       description: 'Open the markup palette'
     },
     markupText: {
@@ -496,6 +505,10 @@ export default {
       text: 'Arrow',
       description: 'Create an arrow markup'
     },
+    markupLine: {
+      text: 'Line',
+      description: 'Create a line markup'
+    },
     markupCallout: {
       text: 'Callout',
       description: 'Create a callout'
@@ -516,10 +529,6 @@ export default {
       text: 'Color',
       description: 'Set the color for new markup drawings'
     },
-    markupLineWeight: {
-      text: 'Lineweight',
-      description: 'Set the lineweight for new markup drawings'
-    },
     markupFontSize: {
       text: 'Font size',
       description: 'Set the font size for text and callout markups'
@@ -528,11 +537,6 @@ export default {
       text: 'Color',
       description:
         'Set the color for the selected measurement, or for measurements you add next'
-    },
-    measurementLineWeight: {
-      text: 'Lineweight',
-      description:
-        'Set the lineweight for the selected measurement, or for measurements you add next'
     },
     measurementFontSize: {
       text: 'Font size',
@@ -567,6 +571,11 @@ export default {
       text: 'Switch',
       description: 'Switches the drawing background between white and black'
     },
+    readingMode: {
+      text: 'Reading',
+      description:
+        'Toggles reading mode: black linework on a white canvas for easier review'
+    },
     zoomToExtent: {
       text: 'Zoom Extents',
       description: 'Zooms to display the maximum extents of all entities'
@@ -582,7 +591,6 @@ export default {
       commandLine: 'Command Line',
       coordinate: 'Coordinate',
       entityInfo: 'Entity Info',
-      fileName: 'File Name',
       languageSelector: 'Language Selector',
       ribbon: 'Ribbon',
       toolbar: 'Toolbar',
@@ -638,7 +646,6 @@ export default {
     moreLayouts: 'More layouts'
   },
   toolPalette: {
-    moreTabs: 'More tabs',
     entityProperties: {
       tab: 'Properties',
       title: 'Entity Properties',
@@ -745,6 +752,23 @@ export default {
         question: 'Question',
         answered: 'Answered',
         closed: 'Closed'
+      }
+    },
+    measurements: {
+      tab: 'Measure',
+      title: 'Measurements',
+      empty: 'No measurements yet',
+      type: 'Type',
+      value: 'Value',
+      filterAll: 'All',
+      delete: 'Delete',
+      clear: 'Clear all',
+      typeValues: {
+        distance: 'Distance',
+        angle: 'Angle',
+        area: 'Area',
+        arc: 'Arc',
+        point: 'XY'
       }
     },
     missingResources: {

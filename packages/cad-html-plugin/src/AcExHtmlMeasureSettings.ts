@@ -144,29 +144,23 @@ function savePersistedSettings(state: AcExMeasureSettingsState): void {
   }
 }
 
-/**
- * First-level language picker. The parent icon is the selected locale badge,
- * matching cad-simple-ui-plugin `childIcon: 'selected'`.
- */
-export function buildAcExLanguageToolbarButton(): string {
-  return '<button type="button" class="mlcad-tool-btn has-children" id="mlcad-lang-btn" aria-haspopup="true" aria-expanded="false" data-children-ui="toolbar" data-i18n-key="toolbar.language" data-i18n-attr="title aria-label" title="Language" aria-label="Language"><span class="mlcad-locale-option-badge" id="mlcad-lang-badge">EN</span></button>'
-}
-
 const LOCALE_LABEL_KEYS: Record<
   AcExHtmlLocale,
-  'toolbar.localeEn' | 'toolbar.localeZh' | 'toolbar.localeCs' | 'toolbar.localeTr'
+  'toolbar.localeEn' | 'toolbar.localeZh' | 'toolbar.localeCs' | 'toolbar.localeTr' | 'toolbar.localeAr'
 > = {
   en: 'toolbar.localeEn',
   zh: 'toolbar.localeZh',
   cs: 'toolbar.localeCs',
-  tr: 'toolbar.localeTr'
+  tr: 'toolbar.localeTr',
+  ar: 'toolbar.localeAr'
 }
 
 const LOCALE_FALLBACK_LABELS: Record<AcExHtmlLocale, string> = {
   en: 'English',
   zh: '中文',
   cs: 'Čeština',
-  tr: 'Türkçe'
+  tr: 'Türkçe',
+  ar: 'العربية'
 }
 
 /**
@@ -177,7 +171,7 @@ export function buildAcExHtmlLocaleStrip(): string {
     const label = LOCALE_FALLBACK_LABELS[locale]
     const key = LOCALE_LABEL_KEYS[locale]
     const badge = ACEX_HTML_LOCALE_BADGES[locale]
-    return `<button type="button" class="mlcad-tool-btn mlcad-locale-option" data-locale="${locale}" data-i18n-key="${key}" data-i18n-attr="title aria-label" title="${label}" aria-label="${label}"><span class="mlcad-locale-option-badge">${badge}</span></button>`
+    return `<button type="button" class="mlcad-tool-btn mlcad-locale-option" data-locale="${locale}" data-i18n-key="${key}" data-i18n-attr="title aria-label" title="${label}" aria-label="${label}"><span class="mlcad-tool-btn-icon" aria-hidden="true"><span class="mlcad-locale-option-badge">${badge}</span></span><span class="mlcad-tool-btn-label" data-i18n-key="${key}" data-i18n-text>${label}</span></button>`
   }).join('')
 
   return `<div id="mlcad-locale-strip-wrap" hidden>
@@ -233,7 +227,7 @@ export interface AcExHtmlMeasureSettingsController {
 /**
  * Wires ortho and polar tracking controls in the object-snap strip.
  * Strip open/close is owned by {@link setupAcExHtmlToolbarFlyouts}.
- * Drawing color / line weight / font size live on the canvas draw-style toolbar.
+ * Drawing color / font size live on the session panel accessory.
  */
 export function setupAcExHtmlMeasureSettings(
   ctx: AcExHtmlMeasureSettingsContext

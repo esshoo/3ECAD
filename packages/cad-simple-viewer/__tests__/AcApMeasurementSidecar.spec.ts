@@ -1,5 +1,3 @@
-import { AcGiLineWeight } from '@mlightcad/data-model'
-
 import {
   measurementSidecarFileName,
   parseMeasurementSidecar,
@@ -8,7 +6,7 @@ import {
 import type { AcApMeasurementSidecarFile } from '../src/command/measure/AcApMeasurementTypes'
 
 describe('AcApMeasurementSidecar', () => {
-  it('round-trips distance, angle, area, arc, and point measurements', () => {
+  it('round-trips distance, angle, area, arc, and point measurements as hairline', () => {
     const file: AcApMeasurementSidecarFile = {
       version: 1,
       drawingName: 'demo.dwg',
@@ -18,8 +16,11 @@ describe('AcApMeasurementSidecar', () => {
           type: 'distance',
           style: {
             color: '#ff0000',
-            lineWeight: AcGiLineWeight.LineWeight070,
-            fontSize: 13
+            lineWeight: 70,
+            fontSize: 13,
+            textHeightWcs: 2.5,
+            arrowSizeWcs: 1.2,
+            strokeWidthWcs: 0.4
           },
           geometry: {
             type: 'distance',
@@ -32,7 +33,7 @@ describe('AcApMeasurementSidecar', () => {
           type: 'angle',
           style: {
             color: '#00ff00',
-            lineWeight: AcGiLineWeight.LineWeight013,
+            lineWeight: 13,
             fontSize: 12
           },
           geometry: {
@@ -48,7 +49,7 @@ describe('AcApMeasurementSidecar', () => {
           layoutId: 'layout-a',
           style: {
             color: '#0000ff',
-            lineWeight: AcGiLineWeight.LineWeight070,
+            lineWeight: 70,
             fontSize: 14
           },
           geometry: {
@@ -65,7 +66,7 @@ describe('AcApMeasurementSidecar', () => {
           type: 'arc',
           style: {
             color: '#ffff00',
-            lineWeight: AcGiLineWeight.LineWeight070,
+            lineWeight: 70,
             fontSize: 13
           },
           geometry: {
@@ -82,7 +83,7 @@ describe('AcApMeasurementSidecar', () => {
           type: 'point',
           style: {
             color: '#ffffff',
-            lineWeight: AcGiLineWeight.LineWeight013,
+            lineWeight: 13,
             fontSize: 11
           },
           geometry: {
@@ -92,10 +93,16 @@ describe('AcApMeasurementSidecar', () => {
         }
       ]
     }
-    const parsed = parseMeasurementSidecar(stringifyMeasurementSidecar(file))
+    const text = stringifyMeasurementSidecar(file)
+    expect(text).not.toMatch(/"strokeWidthWcs"\s*:/)
+    const parsed = parseMeasurementSidecar(text)
     expect(parsed.version).toBe(1)
     expect(parsed.drawingName).toBe('demo.dwg')
     expect(parsed.measurements).toHaveLength(5)
+    expect(parsed.measurements[0].style.textHeightWcs).toBe(2.5)
+    expect(parsed.measurements[0].style.arrowSizeWcs).toBe(1.2)
+    expect(parsed.measurements[0].style.lineWeight).toBe(0)
+    expect(parsed.measurements[0].style.strokeWidthWcs).toBeUndefined()
     expect(parsed.measurements[0].geometry).toEqual({
       type: 'distance',
       start: { x: 0, y: 0 },
@@ -115,6 +122,48 @@ describe('AcApMeasurementSidecar', () => {
       type: 'point',
       position: { x: 3, y: 4 }
     })
+  })
+
+  it('ignores legacy non-zero lineWeight and strokeWidthWcs on parse', () => {
+    const parsed = parseMeasurementSidecar(
+      JSON.stringify({
+        version: 1,
+        measurements: [
+          {
+            id: 'legacy',
+            type: 'point',
+            style: {
+              color: '#abcabc',
+              lineWeight: 35,
+              fontSize: 13,
+              strokeWidthWcs: 0.5
+            },
+            geometry: { type: 'point', position: { x: 1, y: 2 } }
+          }
+        ]
+      })
+    )
+    expect(parsed.measurements[0].style.lineWeight).toBe(0)
+    expect(parsed.measurements[0].style.textHeightWcs).toBeUndefined()
+    expect(parsed.measurements[0].style.strokeWidthWcs).toBeUndefined()
+  })
+
+  it('keeps hairline line weight 0 in sidecar styles', () => {
+    const parsed = parseMeasurementSidecar(
+      JSON.stringify({
+        version: 1,
+        measurements: [
+          {
+            id: 'hairline',
+            type: 'point',
+            style: { color: '#abcabc', lineWeight: 0, fontSize: 13 },
+            geometry: { type: 'point', position: { x: 1, y: 2 } }
+          }
+        ]
+      })
+    )
+    expect(parsed.measurements[0].style.lineWeight).toBe(0)
+    expect(parsed.measurements[0].style.strokeWidthWcs).toBeUndefined()
   })
 
   it('suggests sidecar file names', () => {
@@ -146,6 +195,7 @@ describe('AcApMeasurementSidecar', () => {
     )
     expect(parsed.measurements).toHaveLength(1)
     expect(parsed.measurements[0].id).toBe('ok')
+    expect(parsed.measurements[0].style.lineWeight).toBe(0)
   })
 
   it('keeps legacy arc records that omit the through point', () => {
@@ -169,6 +219,7 @@ describe('AcApMeasurementSidecar', () => {
       })
     )
     expect(parsed.measurements).toHaveLength(1)
+    expect(parsed.measurements[0].style.lineWeight).toBe(0)
     expect(parsed.measurements[0].geometry).toEqual({
       type: 'arc',
       center: { x: 0, y: 0 },

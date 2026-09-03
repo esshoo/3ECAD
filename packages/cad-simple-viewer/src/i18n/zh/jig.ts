@@ -664,6 +664,10 @@ export default {
     firstPoint: '指定第一个点',
     secondPoint: '指定第二个点'
   },
+  measureContinuous: {
+    firstPoint: '指定第一个点',
+    nextPoint: '指定下一个点（或按 Enter 完成）'
+  },
   measurePoint: {
     point: '指定点'
   },
@@ -720,7 +724,7 @@ export default {
       secondCorner: '指定高亮的对角点'
     },
     callout: {
-      tip: '指定引线尖端（箭头端）',
+      tip: '指定引线起点，或选择尚无标注的云线/矩形/圆外框',
       anchor: '指定标注文字框位置',
       content: '输入标注文字'
     },
@@ -1181,6 +1185,11 @@ export default {
         display: '上一个(P)',
         local: '上一个',
         global: 'Previous'
+      },
+      original: {
+        display: '原始视口(O)',
+        local: '原始视口',
+        global: 'Original'
       },
       scale: {
         display: '比例(S)',

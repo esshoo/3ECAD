@@ -38,15 +38,23 @@ import Stats from 'three/examples/jsm/libs/stats.module'
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 
 import { AcApDocManager, AcApSettingManager } from '../app'
+import { AcApZoomCmd } from '../command/AcApZoomCmd'
 import { isMarkupHtmlTextEditing } from '../command/markup/AcApMarkupTextEdit'
+import { notifyMeasurementLayoutChanged } from '../command/measure/AcApMeasurementStore'
 import {
+  acedAttachMobileBoxGesture,
   AcEdBaseView,
   AcEdCalculateSizeCallback,
   AcEdConditionWaiter,
   AcEdCorsorType,
   AcEdGripManager,
+  acedInteractionStrategy,
+  acedIsTouchDerivedMouseEvent,
   AcEdMTextEditor,
   AcEdOpenMode,
+  AcEdSelectionAction,
+  acedShouldIgnoreCompatMouse,
+  AcEdSnapLoupeViewState,
   AcEdSpatialQueryResultItem,
   AcEdSpatialQueryResultItemEx,
   AcEdViewMode,
@@ -58,11 +66,16 @@ import {
   isModelSpaceDatabase,
   readLayoutBackgroundColor
 } from '../editor/global/AcEdUiColor'
+import { ML_UI_Z_CANVAS_HTML_OVERLAY } from '../editor/global/AcEdUiLayout'
 import { isEffectiveSpatialQueryHit } from '../editor/view/AcEdSpatialQueryResult'
 import type { AcTrSpatialSearchOptions } from '../spatialIndex/AcTrSpatialIndex'
 import { AcTrGeometryUtil } from '../util'
 import { acapRunDatabaseEdit } from '../util/AcApDatabaseEdit'
 import type { AcApCompareDisplayOptions } from './AcApCompareDisplay'
+import {
+  ACAP_READING_MODE_BACKGROUND,
+  AcApReadingModeState
+} from './AcApReadingMode'
 import {
   trySelectReviewOverlay,
   trySelectReviewOverlaysByBox
@@ -256,6 +269,15 @@ export class AcTrView2d extends AcEdBaseView {
   private _gripManager: AcEdGripManager
   /** Global keyboard shortcuts for the view (undo/redo, erase, etc.). */
   private _keyHandler: AcEdViewKeyHandler
+  /** Transient reading mode forces black linework on a white canvas. */
+  private readonly _readingMode = new AcApReadingModeState({
+    getCurrentBackgroundColor: () => this._renderer.currentBackgroundColor,
+    applyViewClearColor: value => this.applyViewClearColor(value),
+    setCompareDisplay: options => this.setCompareDisplay(options),
+    markDirty: () => {
+      this._isDirty = true
+    }
+  })
 
   /**
    * Wall-time between cooperative yields during progressive open (ms).
@@ -296,6 +318,12 @@ export class AcTrView2d extends AcEdBaseView {
     renderer.domElement.style.display = 'block'
     renderer.domElement.style.maxWidth = '100%'
     renderer.domElement.style.maxHeight = '100%'
+    // Keep one-finger picks (measure snap loupe) from being stolen by the
+    // browser scroll / long-press context-menu gesture.
+    renderer.domElement.style.touchAction = 'none'
+    renderer.domElement.style.userSelect = 'none'
+    renderer.domElement.style.setProperty('-webkit-user-select', 'none')
+    renderer.domElement.style.setProperty('-webkit-touch-callout', 'none')
 
     super(renderer.domElement, container)
     this._gripManager = new AcEdGripManager(this)
@@ -366,13 +394,23 @@ export class AcTrView2d extends AcEdBaseView {
     let selectionStartCanvas: AcGePoint2dLike | null = null
     let selectionPreviewEl: HTMLDivElement | null = null
 
-    const canHandleSelectionGesture = () => {
+    const canHandleIdlePointer = () => {
       return (
-        this.mode === AcEdViewMode.SELECTION &&
         !this.editor.isActive &&
         !AcEdMTextEditor.getActiveInputBox() &&
         !isMarkupHtmlTextEditing() &&
         !this._gripManager.isDragging
+      )
+    }
+
+    const canHandleSelectionGesture = () => {
+      return this.mode === AcEdViewMode.SELECTION && canHandleIdlePointer()
+    }
+
+    const canHandleMobileBoxGesture = () => {
+      return (
+        canHandleIdlePointer() &&
+        acedInteractionStrategy().canIdleTouchBox(this.mode)
       )
     }
 
@@ -381,27 +419,34 @@ export class AcTrView2d extends AcEdBaseView {
       selectionPreviewEl = null
     }
 
-    this.canvas.addEventListener('mousedown', e => {
-      if (e.button !== 0) return
-      if (!canHandleSelectionGesture()) return
+    const resetSelectionDrag = () => {
+      selectionStartWcs = null
+      selectionStartCanvas = null
+      clearSelectionPreview()
+    }
 
+    const beginSelectionPreview = (clientX: number, clientY: number) => {
       selectionStartCanvas = this.viewportToCanvas({
-        x: e.clientX,
-        y: e.clientY
+        x: clientX,
+        y: clientY
       })
       selectionStartWcs = this.screenToWorld(selectionStartCanvas)
-
+      clearSelectionPreview()
       selectionPreviewEl = document.createElement('div')
       selectionPreviewEl.className = 'ml-jig-preview-rect'
       this.container.appendChild(selectionPreviewEl)
-    })
+    }
 
-    this.canvas.addEventListener('mousemove', e => {
+    const updateSelectionPreview = (
+      clientX: number,
+      clientY: number,
+      action: AcEdSelectionAction = 'replace'
+    ) => {
       if (!selectionStartWcs || !selectionPreviewEl || !selectionStartCanvas) {
         return
       }
 
-      const curCanvas = this.viewportToCanvas({ x: e.clientX, y: e.clientY })
+      const curCanvas = this.viewportToCanvas({ x: clientX, y: clientY })
       const curWcs = this.screenToWorld(curCanvas)
 
       const p1 = this.worldToScreen(selectionStartWcs)
@@ -413,7 +458,6 @@ export class AcTrView2d extends AcEdBaseView {
       const height = Math.abs(p1.y - p2.y)
 
       const mode = this.getSelectionMode(selectionStartCanvas, curCanvas)
-      const action = this.getPointerSelectionAction(e)
       const style = this.getSelectionPreviewStyle(mode, action)
 
       Object.assign(selectionPreviewEl.style, {
@@ -425,32 +469,29 @@ export class AcTrView2d extends AcEdBaseView {
         background: style.background
       })
       selectionPreviewEl.style.setProperty('--line-color', style.lineColor)
-    })
+    }
 
-    this.canvas.addEventListener('mouseup', e => {
-      if (this._gripManager.isDragging) {
-        selectionStartWcs = null
-        selectionStartCanvas = null
-        clearSelectionPreview()
-        return
-      }
+    const finishSelection = (
+      clientX: number,
+      clientY: number,
+      action: AcEdSelectionAction,
+      isClick: boolean
+    ) => {
       if (!selectionStartWcs || !selectionStartCanvas) return
 
       const endCanvas = this.viewportToCanvas({
-        x: e.clientX,
-        y: e.clientY
+        x: clientX,
+        y: clientY
       })
       const endWcs = this.screenToWorld(endCanvas)
       clearSelectionPreview()
 
-      const action = this.getPointerSelectionAction(e)
-
-      if (this.isSelectionClick(selectionStartCanvas, endCanvas)) {
+      if (isClick) {
         if (trySelectReviewOverlay(this, endCanvas.x, endCanvas.y, action)) {
           if (action === 'replace') {
             this.selectionSet.clear()
           }
-        } else {
+        } else if (this.entitySelectionEnabled) {
           const picked = this.pick(endWcs)
           if (picked.length > 0) {
             if (action === 'replace') {
@@ -460,23 +501,105 @@ export class AcTrView2d extends AcEdBaseView {
           } else if (action === 'replace') {
             this.selectionSet.clear()
           }
+        } else if (action === 'replace') {
+          this.selectionSet.clear()
         }
       } else {
         const box = new AcGeBox2d()
           .expandByPoint(selectionStartWcs)
           .expandByPoint(endWcs)
         const mode = this.getSelectionMode(selectionStartCanvas, endCanvas)
-        this.selectByBoxWithMode(box, mode, action)
+        if (this.entitySelectionEnabled) {
+          this.selectByBoxWithMode(box, mode, action)
+        }
         trySelectReviewOverlaysByBox(this, box, mode, action)
       }
 
       selectionStartWcs = null
       selectionStartCanvas = null
+    }
+
+    this.canvas.addEventListener('mousedown', e => {
+      if (e.button !== 0) return
+      if (!canHandleSelectionGesture()) return
+      if (acedIsTouchDerivedMouseEvent(e) || acedShouldIgnoreCompatMouse()) {
+        return
+      }
+
+      beginSelectionPreview(e.clientX, e.clientY)
+    })
+
+    this.canvas.addEventListener('mousemove', e => {
+      if (!selectionStartWcs || !selectionPreviewEl || !selectionStartCanvas) {
+        return
+      }
+      if (acedIsTouchDerivedMouseEvent(e) || acedShouldIgnoreCompatMouse()) {
+        return
+      }
+
+      updateSelectionPreview(
+        e.clientX,
+        e.clientY,
+        this.getPointerSelectionAction(e)
+      )
+    })
+
+    this.canvas.addEventListener('mouseup', e => {
+      if (this._gripManager.isDragging) {
+        resetSelectionDrag()
+        return
+      }
+      if (!selectionStartWcs || !selectionStartCanvas) return
+      if (acedIsTouchDerivedMouseEvent(e) || acedShouldIgnoreCompatMouse()) {
+        return
+      }
+
+      const endCanvas = this.viewportToCanvas({
+        x: e.clientX,
+        y: e.clientY
+      })
+      const action = this.getPointerSelectionAction(e)
+      finishSelection(
+        e.clientX,
+        e.clientY,
+        action,
+        this.isSelectionClick(selectionStartCanvas, endCanvas)
+      )
+    })
+
+    acedAttachMobileBoxGesture({
+      element: this.canvas,
+      shouldStart: () => canHandleMobileBoxGesture(),
+      setNavigationEnabled: enabled => {
+        this.setNavigationEnabled(enabled)
+      },
+      onActivate: (clientX, clientY) => {
+        beginSelectionPreview(clientX, clientY)
+        updateSelectionPreview(clientX, clientY)
+      },
+      onMove: (clientX, clientY) => {
+        updateSelectionPreview(clientX, clientY)
+      },
+      onBoxEnd: (clientX, clientY, moved) => {
+        finishSelection(clientX, clientY, 'replace', !moved)
+      },
+      onTap: (clientX, clientY) => {
+        selectionStartCanvas = this.viewportToCanvas({
+          x: clientX,
+          y: clientY
+        })
+        selectionStartWcs = this.screenToWorld(selectionStartCanvas)
+        finishSelection(clientX, clientY, 'replace', true)
+      },
+      onAbort: () => {
+        resetSelectionDrag()
+      }
     })
 
     this.canvas.addEventListener('dblclick', e => {
       if (e.button !== 0) return
       if (!canHandleSelectionGesture()) return
+      if (!this.entitySelectionEnabled) return
       if (AcApDocManager.instance.curDocument.openMode !== AcEdOpenMode.Write) {
         return
       }
@@ -543,7 +666,10 @@ export class AcTrView2d extends AcEdBaseView {
     this._css2dRenderer.domElement.style.top = '0px'
     this._css2dRenderer.domElement.style.left = '0px'
     this._css2dRenderer.domElement.style.pointerEvents = 'none'
-    this._css2dRenderer.domElement.style.zIndex = '99998'
+    // Below command line / mobile chrome / dialogs; above the WebGL canvas.
+    this._css2dRenderer.domElement.style.zIndex = String(
+      ML_UI_Z_CANVAS_HTML_OVERLAY
+    )
     this._css2dRenderer.domElement.style.maxWidth = '100%'
     this._css2dRenderer.domElement.style.maxHeight = '100%'
     container.appendChild(this._css2dRenderer.domElement)
@@ -584,6 +710,12 @@ export class AcTrView2d extends AcEdBaseView {
     // This method is called after camera and render are created.
     // Children class can override this method to add its own logic
     this.setCursor(AcEdCorsorType.Crosshair)
+    this.editor.events.commandWillStart.addEventListener(() => {
+      this.htmlTransientManager.setHitTestEnabled(false)
+    })
+    this.editor.events.commandEnded.addEventListener(() => {
+      this.htmlTransientManager.setHitTestEnabled(true)
+    })
   }
 
   /**
@@ -604,6 +736,36 @@ export class AcTrView2d extends AcEdBaseView {
    */
   set mode(value: AcEdViewMode) {
     this.activeLayoutView.mode = value
+  }
+
+  /**
+   * Enables or disables OrbitControls on the active layout view.
+   *
+   * @param enabled - When false, pan and zoom are disabled (e.g. while the
+   *   snap loupe is tracking a long-press).
+   */
+  override setNavigationEnabled(enabled: boolean) {
+    const layoutView = this.activeLayoutView
+    if (layoutView) layoutView.enabled = enabled
+  }
+
+  /**
+   * Shows or hides the screen-fixed snap loupe overlay viewport.
+   *
+   * @param state - Loupe screen rectangle and world box, or `null` to hide.
+   */
+  override setSnapLoupe(state: AcEdSnapLoupeViewState | null) {
+    const overlay = this.activeLayoutView?.overlayViewport
+    if (!overlay) return
+    if (!state) {
+      overlay.visible = false
+      this._isDirty = true
+      return
+    }
+    overlay.setScreenRect(state.x, state.y, state.size, state.size)
+    overlay.setViewBox(state.viewBox)
+    overlay.visible = true
+    this._isDirty = true
   }
 
   /**
@@ -824,13 +986,27 @@ export class AcTrView2d extends AcEdBaseView {
    * manager. Does not touch `COLORTHEME` / UI chrome.
    */
   private applyCanvasBackground(value: number) {
-    this._renderer.setClearColor(value)
-    // Updates style-manager background, repaints ACI-7 / bg-follow materials.
     this._renderer.currentBackgroundColor = value
     this._layerAppearance.refreshTextMaterialsInObjectTree(
       this._scene.internalScene
     )
     this.resyncForegroundLayersForBackground()
+    if (this._readingMode.isEnabled) {
+      this._readingMode.noteLayoutBackground(value)
+      this.applyViewClearColor(ACAP_READING_MODE_BACKGROUND)
+      return
+    }
+    this.applyViewClearColor(value)
+  }
+
+  /**
+   * Updates only the WebGL clear colour and cursor chrome.
+   *
+   * Reading mode uses this so the white canvas is visual-only and does not
+   * repaint cached entity materials via the style manager.
+   */
+  private applyViewClearColor(value: number) {
+    this._renderer.setClearColor(value)
     this.editor.syncCursorBackground(value)
     this._isDirty = true
   }
@@ -887,6 +1063,28 @@ export class AcTrView2d extends AcEdBaseView {
     this.applyCanvasBackground(
       readLayoutBackgroundColor(database, this.isModelSpaceLayout(database))
     )
+    this._readingMode.reapplyIfEnabled()
+  }
+
+  /** Whether transient reading mode is active on this view. */
+  get readingModeEnabled() {
+    return this._readingMode.isEnabled
+  }
+
+  /** Toggles transient reading mode on or off. */
+  toggleReadingMode() {
+    this._readingMode.toggle()
+  }
+
+  /**
+   * Enables or disables transient reading mode (black linework, white canvas).
+   *
+   * @param enabled - When true, snapshots the current canvas background and
+   *   forces monochrome display; when false, restores the snapshot and
+   *   original entity colors.
+   */
+  setReadingMode(enabled: boolean) {
+    this._readingMode.setEnabled(enabled)
   }
 
   /**
@@ -1005,10 +1203,14 @@ export class AcTrView2d extends AcEdBaseView {
     return this._scene.activeLayoutBtrId
   }
   set activeLayoutBtrId(value: string) {
+    const previous = this._scene.activeLayoutBtrId
     this._layoutViewManager.activeLayoutBtrId = value
     this._scene.activeLayoutBtrId = value
     this.htmlTransientManager.setActiveLayoutId(value)
     this._isDirty = true
+    if (previous !== value) {
+      notifyMeasurementLayoutChanged()
+    }
   }
 
   /**
@@ -1188,6 +1390,10 @@ export class AcTrView2d extends AcEdBaseView {
         }
         this._progressiveOpenFit.applyFinalFit(() => this.resolveLayoutFitBox())
         this.endProgressiveOpenFit()
+        const originalBtrId = layoutBtrId ?? this.activeLayoutBtrId
+        if (originalBtrId) {
+          AcApZoomCmd.rememberOriginalView(this, originalBtrId)
+        }
       },
       300, // check every 300 ms
       timeout
@@ -1931,6 +2137,7 @@ export class AcTrView2d extends AcEdBaseView {
           }
         }
         this._isDirty = true
+        AcApZoomCmd.rememberOriginalView(this, btrId)
       },
       300,
       0
@@ -2107,6 +2314,7 @@ export class AcTrView2d extends AcEdBaseView {
    * @inheritdoc
    */
   highlight(ids: AcDbObjectId[]) {
+    if (!this.entitySelectionEnabled) return
     this._isDirty = this._scene.select(ids)
   }
 
@@ -2158,6 +2366,7 @@ export class AcTrView2d extends AcEdBaseView {
    * @inheritdoc
    */
   onHover(id: AcDbObjectId) {
+    if (!this.entitySelectionEnabled) return
     this._isDirty = this._scene.hover([id])
   }
 
@@ -2187,11 +2396,21 @@ export class AcTrView2d extends AcEdBaseView {
   }
 
   protected onWindowResize() {
-    super.onWindowResize()
+    // Refresh size first, then sync WebGL / CSS2D / frustum before notifying
+    // listeners so `worldToScreen` consumers see the new projection.
+    this.refreshViewSize()
     this._renderer.setSize(this.width, this.height)
     this._css2dRenderer.setSize(this.width, this.height)
     this._layoutViewManager.resize(this.width, this.height)
     this._isDirty = true
+    this.events.viewResize.dispatch({
+      width: this.width,
+      height: this.height
+    })
+    // CSS2D badges reproject via `_isDirty`. Canvas overlays (measure /
+    // markup strokes, live preview) paint with `worldToScreen` and listen to
+    // `viewChanged` only — resize must notify them too.
+    this.events.viewChanged.dispatch()
   }
 
   private animate = () => {
