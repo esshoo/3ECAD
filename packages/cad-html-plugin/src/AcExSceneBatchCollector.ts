@@ -4,12 +4,12 @@ import {
   AcTrBatchedMesh,
   AcTrBatchedPoint,
   getMaterialMetadata,
+  getSceneDrawableUserData,
   isBatchGeometryActive,
   isBatchGeometryVisible,
   isHighlightCloneDrawable,
   isHighlightOverlayDescendant,
-  isObjectHierarchyVisible
-} from '@mlightcad/three-renderer'
+  isObjectHierarchyVisible} from '@mlightcad/three-renderer'
 import * as THREE from 'three'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'
@@ -22,11 +22,17 @@ import {
   readBatchWorldOffset
 } from './AcExBatchBuffers'
 import {
+  encodeTextureForExport,
+  exportUvsForPositionSlice,
+  isTransparentImagePlaceholder
+} from './AcExMeshTextureExport'
+import {
   computeLineDistancesForSegments,
   exportVertexAttributeSlice,
   extractGradientFill,
   extractHatchPattern,
   extractLinePattern,
+  rebaseHatchPatternToLocalOffset,
   transformHatchPatternToWorldSpace
 } from './AcExPatternSnapshot'
 import type { AcExLineBatch, AcExMeshBatch } from './AcExSnapshotTypes'
@@ -150,6 +156,35 @@ type AcTrBatchedExportSource = {
 
 function shouldExportBatchedSlot(info: AcTrPackedGeometryInfo): boolean {
   return isBatchGeometryActive(info.flags) && isBatchGeometryVisible(info.flags)
+}
+
+/**
+ * Text/point glyph batches are bucketed with `bboxIntersectionCheck` so their
+ * stroke vertices are not used for CAD-style object snap.
+ */
+function batchedLineExcludesFromOsnap(
+  batch: AcTrBatchedExportSource
+): boolean {
+  const { count } = batch.mappingStats
+  for (let geometryId = 0; geometryId < count; geometryId++) {
+    let info: AcTrPackedGeometryInfo & { bboxIntersectionCheck?: boolean }
+    try {
+      info = batch.getGeometryRangeAt(geometryId) as AcTrPackedGeometryInfo & {
+        bboxIntersectionCheck?: boolean
+      }
+    } catch {
+      continue
+    }
+    if (!shouldExportBatchedSlot(info)) continue
+    if (info.bboxIntersectionCheck) {
+      return true
+    }
+  }
+  return false
+}
+
+function drawableExcludesFromOsnap(object: THREE.Object3D): boolean {
+  return getSceneDrawableUserData(object).bboxIntersectionCheck === true
 }
 
 /**
@@ -434,12 +469,19 @@ function resolveExportedHatchPattern(
   if (!hatchPattern) {
     return undefined
   }
+  // Prefer the clone-time world matrix (geometry may already be baked and the
+  // object pose reset). Otherwise use matrixWorld so origin-shifted live
+  // patterned hatches keep pattern bases in the same frame as world-baked verts.
   const bakedWorldMatrix = (object.userData as { bakedWorldMatrix?: number[] })
     .bakedWorldMatrix
-  if (!bakedWorldMatrix || bakedWorldMatrix.length < 16) {
-    return hatchPattern
+  if (bakedWorldMatrix && bakedWorldMatrix.length >= 16) {
+    return transformHatchPatternToWorldSpace(hatchPattern, bakedWorldMatrix)
   }
-  return transformHatchPatternToWorldSpace(hatchPattern, bakedWorldMatrix)
+  object.updateMatrixWorld(true)
+  return transformHatchPatternToWorldSpace(
+    hatchPattern,
+    Array.from(object.matrixWorld.elements)
+  )
 }
 
 function readWorldOffset(object: THREE.Object3D): [number, number, number] {
@@ -464,9 +506,15 @@ function buildMeshBatch(
   object: THREE.Object3D,
   slice: AcExBufferGeometrySlice,
   offset: [number, number, number]
-): AcExMeshBatch {
+): AcExMeshBatch | undefined {
   const style = readMaterialStyle(material)
-  const hatchPattern = resolveExportedHatchPattern(object, style.hatchPattern)
+  const worldHatchPattern = resolveExportedHatchPattern(
+    object,
+    style.hatchPattern
+  )
+  const hatchPattern = worldHatchPattern
+    ? rebaseHatchPatternToLocalOffset(worldHatchPattern, offset)
+    : undefined
   const gradientPositions = style.gradientFill
     ? exportVertexAttributeSlice(geometry, 'gradientPosition')
     : undefined
@@ -480,6 +528,23 @@ function buildMeshBatch(
     side: style.side,
     ...slice
   }
+
+  const meshMaterial = material as THREE.MeshBasicMaterial
+  if (meshMaterial.map) {
+    const texture = encodeTextureForExport(meshMaterial.map)
+    const uvs = exportUvsForPositionSlice(geometry, slice.positions)
+    if (!texture || !uvs) {
+      // Prefer omitting a broken IMAGE/OLE frame over a solid white fill.
+      return undefined
+    }
+    batch.texture = texture
+    batch.uvs = uvs
+    // Textured IMAGE/OLE meshes multiply by material color; keep white so the
+    // PNG is shown at full intensity (matches live AcTrImage).
+    batch.color = 0xffffff
+    batch.side = THREE.DoubleSide
+  }
+
   assignRenderOrder(batch, object, material)
   return batch
 }
@@ -499,6 +564,9 @@ function exportBatchedLine2(
     offset: readWorldOffset(batch),
     lineWidth,
     ...slice
+  }
+  if (batchedLineExcludesFromOsnap(batch)) {
+    exported.excludeFromOsnap = true
   }
   assignRenderOrder(exported, batch, batch.material as THREE.Material)
   return exported
@@ -522,6 +590,9 @@ function exportBatchedLine(batch: AcTrBatchedLine): AcExLineBatch | undefined {
     linePattern,
     lineDistances,
     ...slice
+  }
+  if (batchedLineExcludesFromOsnap(batch)) {
+    exported.excludeFromOsnap = true
   }
   assignRenderOrder(exported, batch, batch.material as THREE.Material)
   return exported
@@ -548,15 +619,19 @@ function exportBatchedPoint(
   if (slice.positions.length === 0) {
     return undefined
   }
+  const mesh = buildMeshBatch(
+    batch.geometry,
+    batch.material as THREE.Material,
+    batch,
+    slice,
+    readWorldOffset(batch)
+  )
+  if (!mesh) {
+    return undefined
+  }
   return {
     points: true,
-    ...buildMeshBatch(
-      batch.geometry,
-      batch.material as THREE.Material,
-      batch,
-      slice,
-      readWorldOffset(batch)
-    )
+    ...mesh
   }
 }
 
@@ -616,6 +691,9 @@ export function collectBatchesFromObject3D(
         lineWidth: readLineWidth(material),
         ...slice
       }
+      if (drawableExcludesFromOsnap(child)) {
+        exported.excludeFromOsnap = true
+      }
       assignRenderOrder(exported, child, material)
       lineBatches.push(exported)
     } else if (
@@ -639,6 +717,9 @@ export function collectBatchesFromObject3D(
         lineDistances,
         ...slice
       }
+      if (drawableExcludesFromOsnap(child)) {
+        exported.excludeFromOsnap = true
+      }
       assignRenderOrder(exported, child, material)
       lineBatches.push(exported)
     } else if (
@@ -646,16 +727,22 @@ export function collectBatchesFromObject3D(
       !(child instanceof AcTrBatchedMesh)
     ) {
       if (!shouldExportPlainDrawable(child)) return
+      const material = readExportMaterial(child)
+      if (isTransparentImagePlaceholder(material)) return
       const rawSlice = exportBufferGeometrySlice(child.geometry)
       if (rawSlice.positions.length === 0) return
-      const material = readExportMaterial(child)
-      const style = readMaterialStyle(material)
-      const { offset, ...slice } = exportSceneDrawableSlice(child, rawSlice, {
-        preserveWorldSpaceForPatternFill: !!style.hatchPattern
-      })
-      meshBatches.push(
-        buildMeshBatch(child.geometry, material, child, slice, offset)
+      // Pattern fills rebase like other meshes; hatch bases are shifted to the
+      // same local offset in buildMeshBatch (world-baked verts caused blocky
+      // hatch shaders at large survey coordinates).
+      const { offset, ...slice } = exportSceneDrawableSlice(child, rawSlice)
+      const mesh = buildMeshBatch(
+        child.geometry,
+        material,
+        child,
+        slice,
+        offset
       )
+      if (mesh) meshBatches.push(mesh)
     }
   })
 

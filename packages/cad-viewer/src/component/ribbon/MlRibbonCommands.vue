@@ -19,34 +19,40 @@ import {
   AcApDocManager,
   acapDrawStyleKindForCommand,
   acapGetMeasurementColor,
+  acapGetMeasurementCustomTextHeightWcs,
   acapGetMeasurementFontSize,
-  acapGetMeasurementLineWeight,
+  acapGetMeasurementTextHeightMode,
   AcApOpenCmd,
   AcApQNewCmd,
   acapRunDatabaseEdit,
+  acapScreenPxToWcs,
   acapSetMeasurementDrawColor,
-  acapSetMeasurementDrawFontSize,
-  acapSetMeasurementDrawLineWeight,
+  acapSetMeasurementTextHeight,
   type AcEdCommandEventArgs,
   AcEdOpenMode,
   type AcTrView2d,
+  acuiOpenTextHeightDialog,
+  acuiResolveTextHeightDialogInitials,
+  acuiResolveTextHeightPatch,
   applyMarkupStyleToSelection,
   applyMeasurementStyleToSelection,
   cssToMarkupColor,
   defaultMarkupColor,
   getActiveMeasurementStyle,
   getEffectiveMeasurementUnits,
+  getMarkupCustomTextHeightWcs,
   getMarkupFontSize,
-  getMarkupLineWeight,
   getMarkupStore,
+  getMarkupTextHeightMode,
+  getMeasurementSnapshot,
   getSelectedMeasurementId,
   isMarkupVisible,
   isMeasurementVisible,
   markupColorToCss,
+  MEASUREMENT_LENGTH_UNIT_FOLLOW_DRAWING,
   refreshMeasurementValueLabels,
   setMarkupDrawColor,
-  setMarkupDrawFontSize,
-  setMarkupDrawLineWeight,
+  setMarkupTextHeight,
   setMeasurementUnitOverride,
   subscribeMeasurementSelection
 } from '@mlightcad/cad-simple-viewer'
@@ -104,16 +110,12 @@ import {
   circleTanTanTan,
   circleThreePoints,
   circleTwoPoints,
-  clearMeasurements,
   countlist,
   defineAttribute,
   editAttribute,
   ellipseArc,
   ellipseCenter,
-  exportIcon,
   hatch,
-  importIcon,
-  layer,
   layerCurrent,
   layerFreeze,
   layerIsolate,
@@ -125,12 +127,6 @@ import {
   layerUnisolate,
   layerUnlock,
   line,
-  markupPanel,
-  measureAngle,
-  measureArc,
-  measureArea,
-  measureDistance,
-  measurePoint,
   mline,
   move,
   mtext,
@@ -142,31 +138,50 @@ import {
   qselect,
   ray,
   rect,
-  revCircle,
-  revCloud,
   revFreeDraw,
-  revRect,
-  revText,
   setting,
   splineFitPoints,
   xline
 } from '../../svg'
+import {
+  clearMarkups,
+  clearMeasurements,
+  exportIcon,
+  importIcon,
+  layer,
+  markupLine,
+  markupPanel,
+  measureAngle,
+  measureArc,
+  measureArea,
+  measureContinuous,
+  measureDistance,
+  measurementPanel,
+  measurePoint,
+  revCircle,
+  revCloud,
+  revRect,
+  revText
+} from '../../svg/toolbarIcons'
 import MlBlockInsertGallery from '../common/MlBlockInsertGallery.vue'
 import MlLayerSelect from '../common/MlLayerSelect.vue'
 import MlCharacterMapDialog from '../dialog/MlCharacterMapDialog.vue'
 import MlRibbonFileName from './MlRibbonFileName.vue'
 import MlRibbonLanguageSelector from './MlRibbonLanguageSelector.vue'
-import MlRibbonMarkupFontSizeSelect from './MlRibbonMarkupFontSizeSelect.vue'
 import MlRibbonMeasurementUnitsPanel from './MlRibbonMeasurementUnitsPanel.vue'
 import MlRibbonPropertyColorDropdown from './MlRibbonPropertyColorDropdown.vue'
 import MlRibbonPropertyLineTypeSelect from './MlRibbonPropertyLineTypeSelect.vue'
 import MlRibbonPropertyLineWeightSelect from './MlRibbonPropertyLineWeightSelect.vue'
+import MlRibbonTextHeightButton from './MlRibbonTextHeightButton.vue'
 import { classifyOverlaySelection } from './overlaySelectionKind'
 import { useHatchContextualRibbon } from './useHatchContextualRibbon'
 import { useMTextContextualRibbon } from './useMTextContextualRibbon'
 
-/** Shared dropdown width for color / line-weight / font-size in overlay Style panels. */
+/** Shared control width for color / text-height in overlay Style panels. */
 const OVERLAY_STYLE_CONTROL_WIDTH = '120px'
+
+/** Authoring mode for overlay text height (Fit to screen vs world height). */
+type OverlayTextHeightMode = 'adaptive' | 'custom'
 
 interface Props {
   currentLocale?: LocaleProp
@@ -195,16 +210,24 @@ const isMarkupOverlayVisible = ref(true)
 const isMeasurementOverlayVisible = ref(true)
 const markupDrawColor = shallowRef(defaultMarkupColor())
 const markupDrawColorDisplay = ref(markupColorToCss(markupDrawColor.value))
-const markupDrawLineWeight = ref<AcGiLineWeight>(getMarkupLineWeight())
-const markupDrawFontSize = ref(getMarkupFontSize())
+const markupTextHeightMode = ref<OverlayTextHeightMode>(getMarkupTextHeightMode())
+const markupTextHeightWcs = ref<number | undefined>(
+  getMarkupCustomTextHeightWcs()
+)
 const measurementDrawColor = shallowRef(new AcCmColor())
 const measurementDrawColorDisplay = ref('#7b8794')
-const measurementDrawLineWeight = ref<AcGiLineWeight>(acapGetMeasurementLineWeight())
-const measurementDrawFontSize = ref(acapGetMeasurementFontSize())
+const measurementTextHeightMode = ref<OverlayTextHeightMode>(
+  acapGetMeasurementTextHeightMode()
+)
+const measurementTextHeightWcs = ref<number | undefined>(
+  acapGetMeasurementCustomTextHeightWcs()
+)
+let textHeightDialogOpen = false
 const measurementLunits = ref(AcDbLinearUnits.Decimal)
 const measurementLuprec = ref(4)
 const measurementAunits = ref(AcDbAngleUnits.DecimalDegrees)
 const measurementAuprec = ref(0)
+const measurementLengthUnit = ref<number>(MEASUREMENT_LENGTH_UNIT_FOLLOW_DRAWING)
 const isRibbonDisabled = computed(() => isDocumentOpening.value)
 const ribbonColor = ref<AcCmColor | undefined>(new AcCmColor())
 const ribbonColorDisplay = ref('#7b8794')
@@ -627,7 +650,7 @@ const scheduleActivateRibbonTabForOverlaySelection = () => {
 
 /**
  * Switches to Measurement or Review while a drawing command is active so
- * color / lineweight / font-size can be changed before the overlay is committed.
+ * color / text-height can be changed before the overlay is committed.
  */
 const activateRibbonTabForDrawCommand = (args: AcEdCommandEventArgs) => {
   const kind = acapDrawStyleKindForCommand(args.command?.globalName)
@@ -780,18 +803,29 @@ const syncMarkupStyleControls = () => {
     const color = cssToMarkupColor(selected.style.color)
     markupDrawColor.value = color
     markupDrawColorDisplay.value = selected.style.color
-    markupDrawLineWeight.value =
-      (selected.style.lineWeight as AcGiLineWeight | undefined) ??
-      getMarkupLineWeight()
-    markupDrawFontSize.value =
+    const view = AcApDocManager.instance?.curView as AcTrView2d | undefined
+    const fontSize =
       selected.style.fontSize != null && selected.style.fontSize > 0
         ? selected.style.fontSize
         : getMarkupFontSize()
+    const wcs =
+      selected.style.textHeightWcs != null &&
+      selected.style.textHeightWcs > 0
+        ? selected.style.textHeightWcs
+        : view
+          ? acapScreenPxToWcs(fontSize, view)
+          : undefined
+    // Selected overlays always summarize as Custom + first-element WCS.
+    markupTextHeightMode.value = 'custom'
+    markupTextHeightWcs.value = wcs
   } else {
     markupDrawColor.value = defaultMarkupColor()
     markupDrawColorDisplay.value = markupColorToCss(markupDrawColor.value)
-    markupDrawLineWeight.value = getMarkupLineWeight()
-    markupDrawFontSize.value = getMarkupFontSize()
+    markupTextHeightMode.value = getMarkupTextHeightMode()
+    markupTextHeightWcs.value =
+      markupTextHeightMode.value === 'custom'
+        ? getMarkupCustomTextHeightWcs()
+        : undefined
   }
   scheduleActivateRibbonTabForOverlaySelection()
 }
@@ -800,7 +834,12 @@ const syncMarkupStyleControls = () => {
  * Apply a style patch to the currently selected markup and republish it.
  */
 const patchSelectedMarkupStyle = (
-  patch: Partial<{ color: string; lineWeight: number; fontSize: number }>
+  patch: Partial<{
+    color: string
+    fontSize: number
+    textHeightMode: OverlayTextHeightMode
+    textHeightWcs: number
+  }>
 ) => {
   const view = AcApDocManager.instance?.curView
   if (view) applyMarkupStyleToSelection(view, patch)
@@ -819,23 +858,56 @@ const handleMarkupDrawColorChange = (value?: AcCmColor) => {
 }
 
 /**
- * Updates the session markup draw line weight used by subsequent markup commands.
- * When a markup is selected, also updates that markup's line weight.
+ * Opens the shared text-height dialog for Review markups.
  */
-const handleMarkupDrawLineWeightChange = (value: AcGiLineWeight) => {
-  setMarkupDrawLineWeight(value)
-  markupDrawLineWeight.value = value
-  patchSelectedMarkupStyle({ lineWeight: value })
-}
-
-/**
- * Updates the session markup draw font size used by text / callout markups.
- * When a markup is selected, also updates that markup's font size.
- */
-const handleMarkupDrawFontSizeChange = (value: number) => {
-  setMarkupDrawFontSize(value)
-  markupDrawFontSize.value = getMarkupFontSize()
-  patchSelectedMarkupStyle({ fontSize: getMarkupFontSize() })
+const handleMarkupTextHeightClick = async () => {
+  if (textHeightDialogOpen) return
+  const view = AcApDocManager.instance?.curView as AcTrView2d | undefined
+  if (!view) return
+  textHeightDialogOpen = true
+  try {
+    const store = getMarkupStore()
+    const selected = store.selectedId
+      ? store.get(store.selectedId)
+      : undefined
+    const hasSelection = selected != null
+    const fontSizePx =
+      selected?.style.fontSize != null && selected.style.fontSize > 0
+        ? selected.style.fontSize
+        : getMarkupFontSize()
+    const selectedTextHeightWcs = hasSelection
+      ? selected?.style.textHeightWcs
+      : getMarkupCustomTextHeightWcs()
+    const initials = acuiResolveTextHeightDialogInitials({
+      hasSelection,
+      sessionMode: hasSelection
+        ? 'custom'
+        : getMarkupTextHeightMode(),
+      fontSizePx,
+      selectedTextHeightWcs,
+      view
+    })
+    const result = await acuiOpenTextHeightDialog({
+      view,
+      ...initials
+    })
+    if (!result) return
+    const patch = acuiResolveTextHeightPatch(
+      view,
+      result,
+      initials.initialFontSizePx
+    )
+    setMarkupTextHeight(
+      patch.textHeightMode,
+      patch.textHeightMode === 'custom'
+        ? (patch.textHeightWcs ?? patch.fontSize)
+        : patch.fontSize
+    )
+    applyMarkupStyleToSelection(view, patch)
+    syncMarkupStyleControls()
+  } finally {
+    textHeightDialogOpen = false
+  }
 }
 
 const syncMeasurementStyleControls = () => {
@@ -843,8 +915,22 @@ const syncMeasurementStyleControls = () => {
   if (selected) {
     measurementDrawColor.value = selected.color.clone()
     measurementDrawColorDisplay.value = acapCssColor(selected.color)
-    measurementDrawLineWeight.value = selected.lineWeight
-    measurementDrawFontSize.value = selected.fontSize
+    const view = AcApDocManager.instance?.curView as AcTrView2d | undefined
+    const measureId = getSelectedMeasurementId()
+    const wcs =
+      selected.textHeightWcs != null && selected.textHeightWcs > 0
+        ? selected.textHeightWcs
+        : measureId
+          ? getMeasurementSnapshot(measureId)?.style.textHeightWcs
+          : undefined
+    const resolvedWcs =
+      wcs != null && wcs > 0
+        ? wcs
+        : view
+          ? acapScreenPxToWcs(selected.fontSize, view)
+          : undefined
+    measurementTextHeightMode.value = 'custom'
+    measurementTextHeightWcs.value = resolvedWcs
   } else {
     const db = getCurrentDatabase()
     if (db) {
@@ -852,8 +938,11 @@ const syncMeasurementStyleControls = () => {
       measurementDrawColor.value = color.clone()
       measurementDrawColorDisplay.value = acapCssColor(color)
     }
-    measurementDrawLineWeight.value = acapGetMeasurementLineWeight()
-    measurementDrawFontSize.value = acapGetMeasurementFontSize()
+    measurementTextHeightMode.value = acapGetMeasurementTextHeightMode()
+    measurementTextHeightWcs.value =
+      measurementTextHeightMode.value === 'custom'
+        ? acapGetMeasurementCustomTextHeightWcs()
+        : undefined
   }
   scheduleActivateRibbonTabForOverlaySelection()
 }
@@ -867,19 +956,55 @@ const handleMeasurementDrawColorChange = (value?: AcCmColor) => {
   if (view) applyMeasurementStyleToSelection(view, { color: value })
 }
 
-const handleMeasurementDrawLineWeightChange = (value: AcGiLineWeight) => {
-  acapSetMeasurementDrawLineWeight(value)
-  measurementDrawLineWeight.value = value
+/**
+ * Opens the shared text-height dialog for Measurement overlays.
+ */
+const handleMeasurementTextHeightClick = async () => {
+  if (textHeightDialogOpen) return
   const view = AcApDocManager.instance?.curView as AcTrView2d | undefined
-  if (view) applyMeasurementStyleToSelection(view, { lineWeight: value })
-}
-
-const handleMeasurementDrawFontSizeChange = (value: number) => {
-  acapSetMeasurementDrawFontSize(value)
-  measurementDrawFontSize.value = acapGetMeasurementFontSize()
-  const view = AcApDocManager.instance?.curView as AcTrView2d | undefined
-  if (view) {
-    applyMeasurementStyleToSelection(view, { fontSize: acapGetMeasurementFontSize() })
+  if (!view) return
+  textHeightDialogOpen = true
+  try {
+    const selected = getActiveMeasurementStyle()
+    const hasSelection = selected != null
+    const measureId = getSelectedMeasurementId()
+    const fontSizePx =
+      selected?.fontSize ?? acapGetMeasurementFontSize()
+    const selectedTextHeightWcs = hasSelection
+      ? selected?.textHeightWcs ??
+        (measureId
+          ? getMeasurementSnapshot(measureId)?.style.textHeightWcs
+          : undefined)
+      : acapGetMeasurementCustomTextHeightWcs()
+    const initials = acuiResolveTextHeightDialogInitials({
+      hasSelection,
+      sessionMode: hasSelection
+        ? 'custom'
+        : acapGetMeasurementTextHeightMode(),
+      fontSizePx,
+      selectedTextHeightWcs,
+      view
+    })
+    const result = await acuiOpenTextHeightDialog({
+      view,
+      ...initials
+    })
+    if (!result) return
+    const patch = acuiResolveTextHeightPatch(
+      view,
+      result,
+      initials.initialFontSizePx
+    )
+    acapSetMeasurementTextHeight(
+      patch.textHeightMode,
+      patch.textHeightMode === 'custom'
+        ? (patch.textHeightWcs ?? patch.fontSize)
+        : patch.fontSize
+    )
+    applyMeasurementStyleToSelection(view, patch)
+    syncMeasurementStyleControls()
+  } finally {
+    textHeightDialogOpen = false
   }
 }
 
@@ -891,6 +1016,7 @@ const syncMeasurementUnitControls = () => {
   measurementLuprec.value = units.luprec
   measurementAunits.value = units.aunits
   measurementAuprec.value = units.auprec
+  measurementLengthUnit.value = units.lengthUnit
 }
 
 const refreshCurrentMeasurementLabels = () => {
@@ -906,6 +1032,7 @@ const applyMeasurementUnitOverride = (
     luprec: number
     aunits: number
     auprec: number
+    lengthUnit: number
   }>
 ) => {
   setMeasurementUnitOverride(patch)
@@ -927,6 +1054,10 @@ const handleMeasurementAunitsChange = (value: number) => {
 
 const handleMeasurementAuprecChange = (value: number) => {
   applyMeasurementUnitOverride({ auprec: value })
+}
+
+const handleMeasurementLengthUnitChange = (value: number) => {
+  applyMeasurementUnitOverride({ lengthUnit: value })
 }
 
 /**
@@ -1107,6 +1238,7 @@ const buildBaseTabs = (
   }
   const verticalToolbarDescriptions = {
     measureDistance: t('main.verticalToolbar.measureDistance.description'),
+    measureContinuous: t('main.verticalToolbar.measureContinuous.description'),
     measureAngle: t('main.verticalToolbar.measureAngle.description'),
     measureArea: t('main.verticalToolbar.measureArea.description'),
     measureArc: t('main.verticalToolbar.measureArc.description'),
@@ -1134,30 +1266,11 @@ const buildBaseTabs = (
       props: { icon: revCloud }
     },
     {
-      id: 'cmd-tool-markup-callout',
-      type: 'button',
-      label: t('main.verticalToolbar.markupCallout.text'),
-      tooltip: t('main.verticalToolbar.markupCallout.description'),
-      size: 'large',
-      props: { icon: ChatLineSquare }
-    },
-    {
-      id: 'cmd-tool-markup-text',
-      type: 'button',
-      label: t('main.verticalToolbar.markupText.text'),
-      tooltip: t('main.verticalToolbar.markupText.description'),
-      size: 'large',
-      props: { icon: revText }
-    }
-  ]
-
-  const reviewShapeItems: RibbonItemModel[] = [
-    {
       id: 'cmd-tool-markup-rect',
       type: 'button',
       label: t('main.verticalToolbar.markupRect.text'),
       tooltip: t('main.verticalToolbar.markupRect.description'),
-      size: 'small',
+      size: 'large',
       props: { icon: revRect }
     },
     {
@@ -1165,9 +1278,20 @@ const buildBaseTabs = (
       type: 'button',
       label: t('main.verticalToolbar.markupCircle.text'),
       tooltip: t('main.verticalToolbar.markupCircle.description'),
-      size: 'small',
+      size: 'large',
       props: { icon: revCircle }
     },
+    {
+      id: 'cmd-tool-markup-callout',
+      type: 'button',
+      label: t('main.verticalToolbar.markupCallout.text'),
+      tooltip: t('main.verticalToolbar.markupCallout.description'),
+      size: 'large',
+      props: { icon: ChatLineSquare }
+    }
+  ]
+
+  const reviewShapeItems: RibbonItemModel[] = [
     {
       id: 'cmd-tool-markup-arrow',
       type: 'button',
@@ -1175,6 +1299,22 @@ const buildBaseTabs = (
       tooltip: t('main.verticalToolbar.markupArrow.description'),
       size: 'small',
       props: { icon: Right }
+    },
+    {
+      id: 'cmd-tool-markup-line',
+      type: 'button',
+      label: t('main.verticalToolbar.markupLine.text'),
+      tooltip: t('main.verticalToolbar.markupLine.description'),
+      size: 'small',
+      props: { icon: markupLine }
+    },
+    {
+      id: 'cmd-tool-markup-text',
+      type: 'button',
+      label: t('main.verticalToolbar.markupText.text'),
+      tooltip: t('main.verticalToolbar.markupText.description'),
+      size: 'small',
+      props: { icon: revText }
     }
   ]
 
@@ -1238,7 +1378,7 @@ const buildBaseTabs = (
       label: t('main.verticalToolbar.clearMarkups.text'),
       tooltip: verticalToolbarDescriptions.clearMarkups,
       size: 'small',
-      props: { icon: Delete }
+      props: { icon: clearMarkups }
     }
   ]
 
@@ -1260,34 +1400,21 @@ const buildBaseTabs = (
       }
     },
     {
-      id: 'markup-draw-line-weight',
-      type: 'custom',
-      size: 'small',
-      tooltip: t('main.verticalToolbar.markupLineWeight.description'),
-      props: {
-        component: MlRibbonPropertyLineWeightSelect,
-        componentProps: {
-          modelValue: markupDrawLineWeight.value,
-          placeholder: t('main.ribbon.property.lineWeight'),
-          numericOnly: true,
-          controlWidth: OVERLAY_STYLE_CONTROL_WIDTH,
-          'onUpdate:modelValue': handleMarkupDrawLineWeightChange
-        }
-      }
-    },
-    {
-      id: 'markup-draw-font-size',
+      id: 'markup-draw-text-height',
       type: 'custom',
       size: 'small',
       tooltip: t('main.verticalToolbar.markupFontSize.description'),
       props: {
-        component: MlRibbonMarkupFontSizeSelect,
+        component: MlRibbonTextHeightButton,
         componentProps: {
-          modelValue: markupDrawFontSize.value,
-          options: [10, 12, 14, 16, 18, 20, 24, 28, 32],
+          mode: markupTextHeightMode.value,
+          textHeightWcs: markupTextHeightWcs.value,
+          fitLabel: t('main.verticalToolbar.markupFontSize.fit'),
+          wcsLabel: t('main.verticalToolbar.markupFontSize.wcs'),
           placeholder: t('main.verticalToolbar.markupFontSize.text'),
+          ariaLabel: t('main.verticalToolbar.markupFontSize.description'),
           controlWidth: OVERLAY_STYLE_CONTROL_WIDTH,
-          'onUpdate:modelValue': handleMarkupDrawFontSizeChange
+          onClick: handleMarkupTextHeightClick
         }
       }
     }
@@ -1301,6 +1428,14 @@ const buildBaseTabs = (
       tooltip: verticalToolbarDescriptions.measureDistance,
       size: 'large',
       props: { icon: measureDistance }
+    },
+    {
+      id: 'cmd-tool-measure-continuous',
+      type: 'button',
+      label: t('main.verticalToolbar.measureContinuous.text'),
+      tooltip: verticalToolbarDescriptions.measureContinuous,
+      size: 'large',
+      props: { icon: measureContinuous }
     },
     {
       id: 'cmd-tool-measure-angle',
@@ -1333,6 +1468,14 @@ const buildBaseTabs = (
       tooltip: verticalToolbarDescriptions.measurePoint,
       size: 'large',
       props: { icon: measurePoint }
+    },
+    {
+      id: 'cmd-tool-measurement-panel',
+      type: 'button',
+      label: t('main.verticalToolbar.measurementPanel.text'),
+      tooltip: t('main.verticalToolbar.measurementPanel.description'),
+      size: 'large',
+      props: { icon: measurementPanel }
     },
     {
       id: 'cmd-tool-measurement-vis',
@@ -1445,34 +1588,21 @@ const buildBaseTabs = (
       }
     },
     {
-      id: 'measurement-draw-line-weight',
-      type: 'custom',
-      size: 'small',
-      tooltip: t('main.verticalToolbar.measurementLineWeight.description'),
-      props: {
-        component: MlRibbonPropertyLineWeightSelect,
-        componentProps: {
-          modelValue: measurementDrawLineWeight.value,
-          placeholder: t('main.ribbon.property.lineWeight'),
-          numericOnly: true,
-          controlWidth: OVERLAY_STYLE_CONTROL_WIDTH,
-          'onUpdate:modelValue': handleMeasurementDrawLineWeightChange
-        }
-      }
-    },
-    {
-      id: 'measurement-draw-font-size',
+      id: 'measurement-draw-text-height',
       type: 'custom',
       size: 'small',
       tooltip: t('main.verticalToolbar.measurementFontSize.description'),
       props: {
-        component: MlRibbonMarkupFontSizeSelect,
+        component: MlRibbonTextHeightButton,
         componentProps: {
-          modelValue: measurementDrawFontSize.value,
-          options: [10, 12, 13, 14, 16, 18, 20, 24, 28, 32],
+          mode: measurementTextHeightMode.value,
+          textHeightWcs: measurementTextHeightWcs.value,
+          fitLabel: t('main.verticalToolbar.measurementFontSize.fit'),
+          wcsLabel: t('main.verticalToolbar.measurementFontSize.wcs'),
           placeholder: t('main.verticalToolbar.measurementFontSize.text'),
+          ariaLabel: t('main.verticalToolbar.measurementFontSize.description'),
           controlWidth: OVERLAY_STYLE_CONTROL_WIDTH,
-          'onUpdate:modelValue': handleMeasurementDrawFontSizeChange
+          onClick: handleMeasurementTextHeightClick
         }
       }
     }
@@ -1517,20 +1647,60 @@ const buildBaseTabs = (
       collections: [
         {
           id: 'measurement-length-units-main',
-          layout: 'row',
+          layout: 'column',
+          rows: 3,
           items: [
             {
-              id: 'measurement-length-units-panel',
+              id: 'measurement-length-units-type',
               type: 'custom',
               size: 'small',
               props: {
                 component: MlRibbonMeasurementUnitsPanel,
                 componentProps: {
                   kind: 'length',
+                  field: 'unitType',
                   unitType: measurementLunits.value,
                   precision: measurementLuprec.value,
+                  lengthUnit: measurementLengthUnit.value,
                   'onUpdate:unitType': handleMeasurementLunitsChange,
-                  'onUpdate:precision': handleMeasurementLuprecChange
+                  'onUpdate:precision': handleMeasurementLuprecChange,
+                  'onUpdate:lengthUnit': handleMeasurementLengthUnitChange
+                }
+              }
+            },
+            {
+              id: 'measurement-length-units-precision',
+              type: 'custom',
+              size: 'small',
+              props: {
+                component: MlRibbonMeasurementUnitsPanel,
+                componentProps: {
+                  kind: 'length',
+                  field: 'precision',
+                  unitType: measurementLunits.value,
+                  precision: measurementLuprec.value,
+                  lengthUnit: measurementLengthUnit.value,
+                  'onUpdate:unitType': handleMeasurementLunitsChange,
+                  'onUpdate:precision': handleMeasurementLuprecChange,
+                  'onUpdate:lengthUnit': handleMeasurementLengthUnitChange
+                }
+              }
+            },
+            {
+              id: 'measurement-length-units-unit',
+              type: 'custom',
+              size: 'small',
+              props: {
+                component: MlRibbonMeasurementUnitsPanel,
+                componentProps: {
+                  kind: 'length',
+                  field: 'lengthUnit',
+                  unitType: measurementLunits.value,
+                  precision: measurementLuprec.value,
+                  lengthUnit: measurementLengthUnit.value,
+                  'onUpdate:unitType': handleMeasurementLunitsChange,
+                  'onUpdate:precision': handleMeasurementLuprecChange,
+                  'onUpdate:lengthUnit': handleMeasurementLengthUnitChange
                 }
               }
             }
@@ -1545,16 +1715,34 @@ const buildBaseTabs = (
       collections: [
         {
           id: 'measurement-angle-units-main',
-          layout: 'row',
+          layout: 'column',
+          rows: 3,
           items: [
             {
-              id: 'measurement-angle-units-panel',
+              id: 'measurement-angle-units-type',
               type: 'custom',
               size: 'small',
               props: {
                 component: MlRibbonMeasurementUnitsPanel,
                 componentProps: {
                   kind: 'angle',
+                  field: 'unitType',
+                  unitType: measurementAunits.value,
+                  precision: measurementAuprec.value,
+                  'onUpdate:unitType': handleMeasurementAunitsChange,
+                  'onUpdate:precision': handleMeasurementAuprecChange
+                }
+              }
+            },
+            {
+              id: 'measurement-angle-units-precision',
+              type: 'custom',
+              size: 'small',
+              props: {
+                component: MlRibbonMeasurementUnitsPanel,
+                componentProps: {
+                  kind: 'angle',
+                  field: 'precision',
                   unitType: measurementAunits.value,
                   precision: measurementAuprec.value,
                   'onUpdate:unitType': handleMeasurementAunitsChange,
@@ -1912,8 +2100,6 @@ const buildBaseTabs = (
           id: 'home-layer',
           title: t('main.ribbon.group.layer'),
           orientation: 'row',
-          enableGroupOverflow: true,
-          priority: 90,
           collections: [
             {
               id: 'home-layer-button',
@@ -2046,7 +2232,6 @@ const buildBaseTabs = (
           id: 'home-properties',
           title: t('main.ribbon.group.properties'),
           orientation: 'row',
-          priority: 20,
           collections: [
             {
               id: 'home-properties-button',
@@ -2321,20 +2506,21 @@ const ribbonData = computed(() => {
   const openMode = docOpenMode.value
   const markupVisible = isMarkupOverlayVisible.value
   const measurementVisible = isMeasurementOverlayVisible.value
-  // Track markup draw style so Review ribbon color / lineweight controls refresh.
+  // Track markup draw style so Review ribbon color / text-height controls refresh.
   markupDrawColor.value
   markupDrawColorDisplay.value
-  markupDrawLineWeight.value
-  markupDrawFontSize.value
+  markupTextHeightMode.value
+  markupTextHeightWcs.value
   // Track measurement draw style so Measurement ribbon controls refresh.
   measurementDrawColor.value
   measurementDrawColorDisplay.value
-  measurementDrawLineWeight.value
-  measurementDrawFontSize.value
+  measurementTextHeightMode.value
+  measurementTextHeightWcs.value
   measurementLunits.value
   measurementLuprec.value
   measurementAunits.value
   measurementAuprec.value
+  measurementLengthUnit.value
   const commandByItemId = new Map<string, string>()
   commandByItemId.set('cmd-line', 'line')
   commandByItemId.set('cmd-polyline', 'pline')
@@ -2400,6 +2586,7 @@ const ribbonData = computed(() => {
   commandByItemId.set('cmd-tool-markup-rect', 'markuprect')
   commandByItemId.set('cmd-tool-markup-circle', 'markupcircle')
   commandByItemId.set('cmd-tool-markup-arrow', 'markuparrow')
+  commandByItemId.set('cmd-tool-markup-line', 'markupline')
   commandByItemId.set('cmd-tool-markup-callout', 'markupcallout')
   commandByItemId.set('cmd-tool-markup-stamp', 'markupstamp')
   commandByItemId.set('cmd-tool-markup-import', 'markupimport')
@@ -2407,10 +2594,12 @@ const ribbonData = computed(() => {
   commandByItemId.set('cmd-tool-markup-vis', 'markupvis')
   commandByItemId.set('cmd-tool-markup-clear', 'clearmarkups')
   commandByItemId.set('cmd-tool-measure-distance', 'measuredistance')
+  commandByItemId.set('cmd-tool-measure-continuous', 'measurecontinuous')
   commandByItemId.set('cmd-tool-measure-angle', 'measureangle')
   commandByItemId.set('cmd-tool-measure-area', 'measurearea')
   commandByItemId.set('cmd-tool-measure-arc', 'measurearc')
   commandByItemId.set('cmd-tool-measure-point', 'measurepoint')
+  commandByItemId.set('cmd-tool-measurement-panel', 'measurementpanel')
   commandByItemId.set('cmd-tool-measurement-vis', 'measurementvis')
   commandByItemId.set('cmd-tool-measurement-import', 'measurementimport')
   commandByItemId.set('cmd-tool-measurement-export', 'measurementexport')
@@ -2454,7 +2643,7 @@ watch(
 
 const fileMenuItems = computed<FileMenuItemModel[]>(() => {
   locale.value
-  return [
+  const items: FileMenuItemModel[] = [
     {
       id: 'QNew',
       label: t('main.mainMenu.new')
@@ -2466,8 +2655,10 @@ const fileMenuItems = computed<FileMenuItemModel[]>(() => {
     {
       id: 'DrawingUnits',
       label: t('main.mainMenu.drawingUnits')
-    },
-    {
+    }
+  ]
+  if (!AcApDocManager.instance.disableExport) {
+    items.push({
       id: 'Export',
       label: t('main.mainMenu.exportMenu'),
       divided: true,
@@ -2493,13 +2684,14 @@ const fileMenuItems = computed<FileMenuItemModel[]>(() => {
           label: t('main.mainMenu.exportImage')
         }
       ]
-    },
-    {
-      id: 'About',
-      label: t('main.mainMenu.about'),
-      divided: true
-    }
-  ]
+    })
+  }
+  items.push({
+    id: 'About',
+    label: t('main.mainMenu.about'),
+    divided: true
+  })
+  return items
 })
 
 const ribbonTexts = computed<RibbonLocaleTexts>(() => {
@@ -2555,13 +2747,25 @@ const handleHeaderRedo = () => {
 
 const handleFileMenuSelect = async (command: string) => {
   if (isRibbonDisabled.value) return
+  if (
+    AcApDocManager.instance.disableExport &&
+    (command === 'Convert' ||
+      command === 'ExportHtml' ||
+      command === 'ExportPdf' ||
+      command === 'ExportSvg' ||
+      command === 'PngOut')
+  ) {
+    return
+  }
   if (command === 'Convert') {
     const cmd = new AcApConvertToDxfCmd()
     cmd.trigger(AcApDocManager.instance.context)
   } else if (command === 'ExportHtml') {
     AcApDocManager.instance.sendStringToExecute('chtml')
   } else if (command === 'ExportPdf') {
-    await runLazyCommand('cpdf')
+    // Same path as chtml/csvg: DocManager lazy-loads the plugin then runs cpdf.
+    // Avoid a separate await+execute that raced Vite's first-time pdf-lib optimize.
+    AcApDocManager.instance.sendStringToExecute('cpdf')
   } else if (command === 'ExportSvg') {
     AcApDocManager.instance.sendStringToExecute('csvg')
   } else if (command === 'PngOut') {
@@ -2636,10 +2840,7 @@ const handleFileMenuSelect = async (command: string) => {
         />
       </template>
     </ml-ribbon>
-    <ml-ribbon-file-name
-      v-if="features.isShowFileName"
-      :container-el="ribbonContainerRef"
-    />
+    <ml-ribbon-file-name :container-el="ribbonContainerRef" />
     <ml-character-map-dialog
       v-model="mtextCharacterMapVisible"
       :font-options="mtextCharacterMapFontOptions"

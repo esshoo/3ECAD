@@ -1,11 +1,17 @@
 import {
-  type AcApHtmlExportOptions,
+  type AcApHtmlExpiryDays,
+  type AcApHtmlExportFormat,
   AcApHtmlSnapshotBuilder,
   type AcExInitialViewMode,
   type AcExViewerMode,
+  buildAcExPackage,
   captureAcApHtmlViewState,
+  encodeSnapshot,
   packHtml,
-  resolveAcApHtmlExportOptions
+  protectAcExHtmlEncodedSnapshot,
+  resolveAcApHtmlExpiresAt,
+  resolveAcApHtmlExportOptions,
+  zipAcExPackageFiles
 } from '@mlightcad/cad-html-plugin'
 import {
   AcApDocManager,
@@ -34,17 +40,35 @@ const OPEN_OPTIONS: AcApOpenDatabaseOptions = {
   progressiveRendering: false
 }
 
+type ConverterTab = 'data' | 'display' | 'security'
+
 const MESSAGES = {
   invalidType: 'Please choose a .dwg or .dxf file.',
   ready: 'Selected {name}. Adjust options, then convert.',
   opening: 'Opening {name}…',
-  converting: 'Converting {name} to HTML…',
-  converted: 'Download started for {name}.html',
+  convertingHtml: 'Converting {name} to HTML…',
+  convertingZip: 'Converting {name} to multi-file package…',
+  convertedHtml: 'Download started for {name}.html',
+  convertedZip: 'Download started for {name}.zip',
   openFailed: 'Failed to open {name}.',
   convertFailed: 'Conversion failed: {error}',
+  expiryCustomRequired: 'Please select a custom expiry date and time.',
+  expiryCustomPast: 'The custom expiry must be in the future.',
+  copyPasswordSuccess: 'Password copied to the clipboard.',
+  copyPasswordFailed: 'Unable to copy the password to the clipboard.',
   runtimeMissing:
     'Failed to load viewer-runtime.iife.js. Rebuild the example package and refresh.'
 } as const
+
+const CONVERT_BUTTON_LABELS = {
+  single: 'Convert and download HTML',
+  multi: 'Convert and download ZIP'
+} as const
+
+const PASSWORD_CHARS =
+  'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+
+const EXPIRY_DAY_VALUES = new Set<string>(['1', '7', '30', 'never', 'custom'])
 
 function format(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => vars[key] ?? '')
@@ -72,6 +96,9 @@ class HtmlConverterApp {
   private readonly convertButton: HTMLButtonElement
   private readonly exportInvisibleLayers: HTMLInputElement
   private readonly exportLayouts: HTMLInputElement
+  private readonly customExpiresAt: HTMLInputElement
+  private readonly exportPassword: HTMLInputElement
+  private readonly copyPasswordButton: HTMLButtonElement
   private initialized = false
   private busy = false
   private currentName = ''
@@ -103,8 +130,18 @@ class HtmlConverterApp {
     this.exportLayouts = document.getElementById(
       'exportLayouts'
     ) as HTMLInputElement
+    this.customExpiresAt = document.getElementById(
+      'customExpiresAt'
+    ) as HTMLInputElement
+    this.exportPassword = document.getElementById(
+      'exportPassword'
+    ) as HTMLInputElement
+    this.copyPasswordButton = document.getElementById(
+      'copyPassword'
+    ) as HTMLButtonElement
 
     this.bindEvents()
+    this.initSecurityDefaults()
   }
 
   private bindEvents() {
@@ -141,9 +178,137 @@ class HtmlConverterApp {
     document
       .querySelectorAll<HTMLInputElement>('.choice input[type="radio"]')
       .forEach(input => {
-        input.addEventListener('change', () => this.syncChoiceSelection())
+        input.addEventListener('change', () => {
+          this.syncChoiceSelection()
+          if (input.name === 'exportFormat') {
+            this.syncExportFormatUi()
+          }
+        })
       })
     this.syncChoiceSelection()
+    this.syncExportFormatUi()
+
+    document.querySelectorAll<HTMLButtonElement>('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const name = tab.dataset.tab
+        if (name !== 'data' && name !== 'display' && name !== 'security') {
+          return
+        }
+        if (name === 'security' && this.readExportFormat() === 'multi') {
+          return
+        }
+        this.activateTab(name)
+      })
+    })
+
+    document
+      .querySelectorAll<HTMLInputElement>('input[name="expiryDays"]')
+      .forEach(input => {
+        input.addEventListener('change', () => this.syncExpirySelection())
+      })
+    this.syncExpirySelection()
+
+    document.getElementById('generatePassword')?.addEventListener('click', () => {
+      this.generatePassword()
+    })
+    this.copyPasswordButton.addEventListener('click', () => {
+      void this.copyPassword()
+    })
+    this.exportPassword.addEventListener('input', () => {
+      this.syncCopyPasswordButton()
+    })
+    this.syncCopyPasswordButton()
+
+    document.getElementById('togglePassword')?.addEventListener('click', () => {
+      this.togglePasswordVisibility()
+    })
+  }
+
+  private activateTab(tab: ConverterTab) {
+    document.querySelectorAll<HTMLButtonElement>('.tab').forEach(button => {
+      const isActive = button.dataset.tab === tab
+      button.classList.toggle('is-active', isActive)
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false')
+      button.tabIndex = isActive ? 0 : -1
+    })
+    const panels: Record<ConverterTab, HTMLElement | null> = {
+      data: document.getElementById('panelData'),
+      display: document.getElementById('panelDisplay'),
+      security: document.getElementById('panelSecurity')
+    }
+    ;(Object.keys(panels) as ConverterTab[]).forEach(name => {
+      const panel = panels[name]
+      if (panel) {
+        panel.hidden = name !== tab
+      }
+    })
+  }
+
+  private readExportFormat(): AcApHtmlExportFormat {
+    const raw = (
+      document.querySelector(
+        'input[name="exportFormat"]:checked'
+      ) as HTMLInputElement | null
+    )?.value
+    return raw === 'multi' ? 'multi' : 'single'
+  }
+
+  private syncExportFormatUi() {
+    const isMulti = this.readExportFormat() === 'multi'
+    const securityTab = document.getElementById(
+      'tabSecurity'
+    ) as HTMLButtonElement | null
+    const securityHint = document.getElementById('securitySingleOnlyHint')
+    const securityControls = document.getElementById('securityControls')
+    const securityPanel = document.getElementById('panelSecurity')
+
+    if (securityTab) {
+      securityTab.classList.toggle('is-disabled', isMulti)
+      securityTab.setAttribute('aria-disabled', isMulti ? 'true' : 'false')
+      if (isMulti) {
+        securityTab.tabIndex = -1
+      }
+    }
+    if (securityHint) {
+      securityHint.hidden = !isMulti
+    }
+    if (securityControls) {
+      securityControls.hidden = isMulti
+    }
+    if (securityPanel) {
+      securityPanel.classList.toggle('is-disabled', isMulti)
+    }
+    if (isMulti) {
+      const activeTab = document.querySelector('.tab.is-active') as
+        | HTMLButtonElement
+        | null
+      if (activeTab?.dataset.tab === 'security') {
+        this.activateTab('data')
+      }
+    }
+
+    this.convertButton.textContent = isMulti
+      ? CONVERT_BUTTON_LABELS.multi
+      : CONVERT_BUTTON_LABELS.single
+  }
+
+  private initSecurityDefaults() {
+    this.customExpiresAt.value = this.toDateTimeLocalValue(
+      this.defaultCustomExpiresAt()
+    )
+    this.customExpiresAt.min = this.toDateTimeLocalValue(new Date())
+  }
+
+  private defaultCustomExpiresAt(): Date {
+    const date = new Date()
+    date.setDate(date.getDate() + 1)
+    date.setSeconds(0, 0)
+    return date
+  }
+
+  private toDateTimeLocalValue(date: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
   }
 
   private syncChoiceSelection() {
@@ -154,6 +319,72 @@ class HtmlConverterApp {
         Boolean(input && (input as HTMLInputElement).checked)
       )
     })
+  }
+
+  private syncExpirySelection() {
+    document
+      .querySelectorAll<HTMLLabelElement>('.expiry-option')
+      .forEach(label => {
+        const input = label.querySelector('input[type="radio"]')
+        label.classList.toggle(
+          'is-selected',
+          Boolean(input && (input as HTMLInputElement).checked)
+        )
+      })
+    const selected = (
+      document.querySelector(
+        'input[name="expiryDays"]:checked'
+      ) as HTMLInputElement | null
+    )?.value
+    this.customExpiresAt.classList.toggle(
+      'is-visible',
+      selected === 'custom'
+    )
+  }
+
+  private syncCopyPasswordButton() {
+    this.copyPasswordButton.disabled = this.exportPassword.value.trim().length === 0
+  }
+
+  private togglePasswordVisibility() {
+    const toggle = document.getElementById(
+      'togglePassword'
+    ) as HTMLButtonElement | null
+    const show = this.exportPassword.type === 'password'
+    this.exportPassword.type = show ? 'text' : 'password'
+    if (!toggle) {
+      return
+    }
+    toggle.classList.toggle('is-visible', show)
+    toggle.setAttribute('aria-pressed', show ? 'true' : 'false')
+    toggle.setAttribute(
+      'aria-label',
+      show ? 'Hide password' : 'Show password'
+    )
+    toggle.title = show ? 'Hide password' : 'Show password'
+  }
+
+  private generatePassword() {
+    const bytes = new Uint8Array(12)
+    crypto.getRandomValues(bytes)
+    this.exportPassword.value = Array.from(
+      bytes,
+      byte => PASSWORD_CHARS[byte % PASSWORD_CHARS.length]!
+    ).join('')
+    this.syncCopyPasswordButton()
+  }
+
+  private async copyPassword() {
+    const password = this.exportPassword.value.trim()
+    if (!password) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(password)
+      this.setStatus(MESSAGES.copyPasswordSuccess)
+    } catch {
+      this.setStatus(MESSAGES.copyPasswordFailed, true)
+    }
   }
 
   private setStatus(message: string, isError = false) {
@@ -292,7 +523,47 @@ class HtmlConverterApp {
     )
   }
 
-  private readExportOptions(): AcApHtmlExportOptions {
+  private readExpiryDays(): AcApHtmlExpiryDays {
+    const raw = (
+      document.querySelector(
+        'input[name="expiryDays"]:checked'
+      ) as HTMLInputElement | null
+    )?.value
+    if (!raw || !EXPIRY_DAY_VALUES.has(raw)) {
+      return 'never'
+    }
+    if (raw === '1' || raw === '7' || raw === '30') {
+      return Number(raw) as 1 | 7 | 30
+    }
+    return raw as 'never' | 'custom'
+  }
+
+  private readCustomExpiresAt(): number | null {
+    const value = this.customExpiresAt.value
+    if (!value) {
+      return null
+    }
+    const time = new Date(value).getTime()
+    return Number.isNaN(time) ? null : time
+  }
+
+  private validateSecurityOptions(
+    options: ReturnType<typeof resolveAcApHtmlExportOptions>
+  ): string | null {
+    if (options.exportFormat === 'multi' || options.expiryDays !== 'custom') {
+      return null
+    }
+    if (options.expiresAt == null) {
+      return MESSAGES.expiryCustomRequired
+    }
+    if (options.expiresAt <= Date.now()) {
+      return MESSAGES.expiryCustomPast
+    }
+    return null
+  }
+
+  private readExportOptions(): ReturnType<typeof resolveAcApHtmlExportOptions> {
+    const exportFormat = this.readExportFormat()
     const viewerMode = (
       document.querySelector(
         'input[name="viewerMode"]:checked'
@@ -303,17 +574,41 @@ class HtmlConverterApp {
         'input[name="initialView"]:checked'
       ) as HTMLInputElement | null
     )?.value as AcExInitialViewMode | undefined
+    const expiryDays = this.readExpiryDays()
     return resolveAcApHtmlExportOptions({
+      exportFormat,
       exportInvisibleLayers: this.exportInvisibleLayers.checked,
       exportLayouts: this.exportLayouts.checked,
       initialView: initialView ?? 'fit',
-      viewerMode: viewerMode ?? 'measure'
+      viewerMode: viewerMode ?? 'measure',
+      expiryDays: exportFormat === 'multi' ? 'never' : expiryDays,
+      expiresAt:
+        exportFormat === 'single' && expiryDays === 'custom'
+          ? this.readCustomExpiresAt()
+          : null,
+      password:
+        exportFormat === 'single'
+          ? this.exportPassword.value.trim() || undefined
+          : undefined
     })
   }
 
-  private triggerDownload(html: string, downloadName: string) {
+  private triggerDownload(
+    data: string | Uint8Array,
+    downloadName: string,
+    mimeType: string
+  ) {
     this.clearDownloadUrl()
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    // Copy Uint8Array so Blob gets an ArrayBuffer-backed view (TS DOM typings).
+    const blobPart =
+      typeof data === 'string'
+        ? data
+        : (() => {
+            const copy = new Uint8Array(data.byteLength)
+            copy.set(data)
+            return copy
+          })()
+    const blob = new Blob([blobPart], { type: mimeType })
     this.downloadUrl = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = this.downloadUrl
@@ -324,7 +619,9 @@ class HtmlConverterApp {
     document.body.removeChild(link)
   }
 
-  private async buildHtml(fileName: string): Promise<string> {
+  private async buildExport(
+    fileName: string
+  ): Promise<{ downloadName: string; mimeType: string; data: string | Uint8Array }> {
     const view = AcApDocManager.instance.curView as AcTrView2d
     if (
       !view?.cadScene ||
@@ -342,11 +639,12 @@ class HtmlConverterApp {
     })
 
     const document = AcApDocManager.instance.curDocument
+    const baseName = getDrawingExportBaseName(fileName)
     const snapshot = await new AcApHtmlSnapshotBuilder().buildAsync(
       view.cadScene,
       document.database,
       {
-        title: getDrawingExportBaseName(fileName),
+        title: baseName,
         background: view.backgroundColor,
         exportInvisibleLayers: resolved.exportInvisibleLayers,
         exportLayouts: resolved.exportLayouts,
@@ -357,15 +655,50 @@ class HtmlConverterApp {
           (resolved.exportLayouts ||
             view.activeLayoutBtrId === view.modelSpaceBtrId)
             ? captureAcApHtmlViewState(view)
-            : undefined
+            : undefined,
+        canvasAspectRatio: view.width / Math.max(view.height, 1)
       }
     )
 
     const viewerRuntime = await (this.runtimePromise ?? this.loadViewerRuntime())
-    return packHtml(snapshot, {
+
+    if (resolved.exportFormat === 'multi') {
+      const pkg = buildAcExPackage(snapshot, {
+        viewerRuntime,
+        baseName
+      })
+      return {
+        downloadName: resolveExportDownloadName(fileName, 'zip'),
+        mimeType: 'application/zip',
+        data: zipAcExPackageFiles(pkg)
+      }
+    }
+
+    const expiresAt = resolveAcApHtmlExpiresAt(
+      resolved.expiryDays,
+      Date.now(),
+      resolved.expiresAt
+    )
+    const protectedSnapshot = await protectAcExHtmlEncodedSnapshot(
+      encodeSnapshot(snapshot),
+      {
+        expiresAt,
+        password: resolved.password || undefined
+      }
+    )
+
+    const html = packHtml(snapshot, {
       title: snapshot.meta.title,
-      viewerRuntime
+      viewerRuntime,
+      encoded: protectedSnapshot.encoded,
+      accessManifest: protectedSnapshot.manifest
     })
+
+    return {
+      downloadName: resolveExportDownloadName(fileName, 'html'),
+      mimeType: 'text/html;charset=utf-8',
+      data: html
+    }
   }
 
   private async convert() {
@@ -373,7 +706,16 @@ class HtmlConverterApp {
       return
     }
 
+    const options = this.readExportOptions()
+    const securityError = this.validateSecurityOptions(options)
+    if (securityError) {
+      this.setStatus(securityError, true)
+      this.activateTab('security')
+      return
+    }
+
     const sourceName = this.currentName
+    const isMulti = options.exportFormat === 'multi'
     this.setBusy(true, format(MESSAGES.opening, { name: sourceName }))
     try {
       await this.initialize()
@@ -383,12 +725,19 @@ class HtmlConverterApp {
         return
       }
 
-      this.setStatus(format(MESSAGES.converting, { name: sourceName }))
-      const html = await this.buildHtml(sourceName)
-      const downloadName = resolveExportDownloadName(sourceName, 'html')
-      this.triggerDownload(html, downloadName)
       this.setStatus(
-        format(MESSAGES.converted, {
+        format(isMulti ? MESSAGES.convertingZip : MESSAGES.convertingHtml, {
+          name: sourceName
+        })
+      )
+      const exportResult = await this.buildExport(sourceName)
+      this.triggerDownload(
+        exportResult.data,
+        exportResult.downloadName,
+        exportResult.mimeType
+      )
+      this.setStatus(
+        format(isMulti ? MESSAGES.convertedZip : MESSAGES.convertedHtml, {
           name: drawingBaseName(sourceName)
         })
       )

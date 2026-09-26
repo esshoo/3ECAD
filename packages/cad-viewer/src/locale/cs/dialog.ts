@@ -13,6 +13,8 @@ export default {
     lengthSection: 'Délka',
     lengthType: 'Typ:',
     lengthPrecision: 'Přesnost:',
+    lengthUnit: 'Jednotka:',
+    lengthUnitFollowDrawing: 'Podle výkresu',
     angleSection: 'Úhel',
     angleType: 'Typ:',
     anglePrecision: 'Přesnost:',
@@ -69,6 +71,17 @@ export default {
   },
   exportHtmlDlg: {
     title: 'Exportovat do HTML',
+    tabData: 'Data',
+    tabDisplay: 'Zobrazení',
+    tabSecurity: 'Zabezpečení',
+    exportFormat: 'Formát exportu',
+    exportFormatSingle: 'Samostatné HTML',
+    exportFormatSingleHint: 'Jeden soubor .html, který se otevře offline',
+    exportFormatMulti: 'Vícesouborový balíček (ZIP)',
+    exportFormatMultiHint:
+      'Stáhne zip; po rozbalení a nasazení lze načítat postupně. Heslo a platnost platí jen pro samostatné HTML',
+    securitySingleOnlyHint:
+      'Heslo a platnost jsou dostupné pouze pro export samostatného HTML.',
     layersSection: 'Hladiny',
     exportInvisibleLayers: 'Exportovat neviditelné hladiny',
     exportInvisibleLayersHint:
@@ -88,7 +101,48 @@ export default {
     viewerModeView: 'Prohlížení',
     viewerModeViewHint: 'Pouze posun, přiblížení a ovládání hladin',
     viewerModeMeasure: 'Měření a kontrola',
-    viewerModeMeasureHint: 'Nástroje prohlížení plus měření a poznámky'
+    viewerModeMeasureHint: 'Nástroje prohlížení plus měření a poznámky',
+    expirySection: 'Platnost',
+    expiry1Day: '1 den',
+    expiry7Days: '7 dní',
+    expiry30Days: '30 dní',
+    expiryCustom: 'Vlastní',
+    expiryNever: 'Bez expirace',
+    expiryCustomPlaceholder: 'Vyberte datum a čas expirace',
+    expiryCustomRequired: 'Vyberte vlastní datum a čas expirace.',
+    expiryCustomPast: 'Vlastní expirace musí být v budoucnosti.',
+    expiryHint: 'Po uplynutí platnosti již exportované HTML nebude možné otevřít.',
+    passwordSection: 'Heslo',
+    passwordPlaceholder: 'Ponechte prázdné bez hesla',
+    passwordHint:
+      'Po nastavení hesla bude k otevření HTML vyžadováno správné heslo. Zadejte ho ručně nebo vygenerujte tlačítkem.',
+    generatePassword: 'Vygenerovat',
+    copyPassword: 'Kopírovat',
+    copyPasswordSuccess: 'Heslo bylo zkopírováno do schránky.',
+    copyPasswordFailed: 'Heslo se nepodařilo zkopírovat do schránky.'
+  },
+  exportPdfDlg: {
+    title: 'Exportovat do PDF',
+    modelSpaceSection: 'Modelový prostor',
+    modelSpaceDisplay: 'Zobrazení',
+    modelSpaceDisplayHint: 'Exportovat obsah aktuálně zobrazený ve výřezu',
+    modelSpaceExtents: 'Rozsah',
+    modelSpaceExtentsHint:
+      'Exportovat rozsah všech objektů v aktuálním prostoru',
+    paperSpaceSection: 'Výkresový prostor',
+    exportLayouts: 'Exportovat rozvržení',
+    exportLayoutsHint:
+      'Zahrnout rozvržení výkresového prostoru jako další stránky PDF',
+    textModeSection: 'Text',
+    textMode: 'Vykreslení textu',
+    textModeText: 'Textové objekty',
+    textModeTextHint:
+      'Text zůstane volitelný/vyhledatelný a soubor se zmenší (SHX text zůstane vektorový)',
+    textModeVector: 'Vektorové obrysy',
+    textModeVectorHint:
+      'Převede text na čáry a výplně podle obrazovky, ale soubor je větší',
+    yes: 'Ano',
+    no: 'Ne'
   },
   quickSelectDlg: {
     title: 'Rychlý výběr',

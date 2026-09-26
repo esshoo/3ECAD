@@ -31,6 +31,8 @@ jest.mock('@mlightcad/cad-simple-viewer', () => {
     AcApI18n: {
       t: (key: string) => {
         const globals: Record<string, string> = {
+          'jig.chtml.keywords.single.global': 'Single',
+          'jig.chtml.keywords.multi.global': 'Multi',
           'jig.chtml.keywords.yes.global': 'Yes',
           'jig.chtml.keywords.no.global': 'No',
           'jig.chtml.keywords.extents.global': 'Extents',
@@ -78,6 +80,17 @@ function none() {
   return { status: AcEdPromptStatus.None }
 }
 
+const defaultExportOptions = {
+  exportFormat: 'single',
+  exportInvisibleLayers: true,
+  exportLayouts: true,
+  initialView: 'fit',
+  viewerMode: 'measure',
+  expiryDays: 'never',
+  expiresAt: null,
+  password: ''
+}
+
 describe('AcApExportHtmlCmd prompt defaults', () => {
   const cmd = new AcApExportHtmlCmd()
 
@@ -96,29 +109,30 @@ describe('AcApExportHtmlCmd prompt defaults', () => {
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
+      .mockResolvedValueOnce(none())
 
     await cmd.execute(context)
 
-    expect(getKeywords).toHaveBeenCalledTimes(4)
+    expect(getKeywords).toHaveBeenCalledTimes(5)
     expect(getKeywords.mock.calls[0][0].allowNone).toBe(true)
     expect(getKeywords.mock.calls[1][0].allowNone).toBe(true)
     expect(getKeywords.mock.calls[2][0].allowNone).toBe(true)
     expect(getKeywords.mock.calls[3][0].allowNone).toBe(true)
+    expect(getKeywords.mock.calls[4][0].allowNone).toBe(true)
 
     expect(convert()).toHaveBeenCalledWith(
       'drawing.dwg',
-      {
-        exportInvisibleLayers: true,
-        exportLayouts: true,
-        initialView: 'fit',
-        viewerMode: 'measure'
-      },
+      defaultExportOptions,
       context.view
     )
   })
 
   test('accepts default keyword (OK) for all prompts and exports', async () => {
     getKeywords
+      .mockResolvedValueOnce({
+        status: AcEdPromptStatus.OK,
+        stringResult: 'Single'
+      })
       .mockResolvedValueOnce({
         status: AcEdPromptStatus.OK,
         stringResult: 'Yes'
@@ -140,18 +154,34 @@ describe('AcApExportHtmlCmd prompt defaults', () => {
 
     expect(convert()).toHaveBeenCalledWith(
       'drawing.dwg',
-      {
-        exportInvisibleLayers: true,
-        exportLayouts: true,
-        initialView: 'fit',
-        viewerMode: 'measure'
-      },
+      defaultExportOptions,
+      context.view
+    )
+  })
+
+  test('exports multi-file package when Multi keyword is selected', async () => {
+    getKeywords
+      .mockResolvedValueOnce({
+        status: AcEdPromptStatus.OK,
+        stringResult: 'Multi'
+      })
+      .mockResolvedValueOnce(none())
+      .mockResolvedValueOnce(none())
+      .mockResolvedValueOnce(none())
+      .mockResolvedValueOnce(none())
+
+    await cmd.execute(context)
+
+    expect(convert()).toHaveBeenCalledWith(
+      'drawing.dwg',
+      { ...defaultExportOptions, exportFormat: 'multi' },
       context.view
     )
   })
 
   test('exports with view-only viewer mode when View keyword is selected', async () => {
     getKeywords
+      .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
@@ -164,18 +194,14 @@ describe('AcApExportHtmlCmd prompt defaults', () => {
 
     expect(convert()).toHaveBeenCalledWith(
       'drawing.dwg',
-      {
-        exportInvisibleLayers: true,
-        exportLayouts: true,
-        initialView: 'fit',
-        viewerMode: 'view'
-      },
+      { ...defaultExportOptions, viewerMode: 'view' },
       context.view
     )
   })
 
   test('exports without layouts when No is selected for the layouts prompt', async () => {
     getKeywords
+      .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce({
         status: AcEdPromptStatus.OK,
@@ -188,12 +214,7 @@ describe('AcApExportHtmlCmd prompt defaults', () => {
 
     expect(convert()).toHaveBeenCalledWith(
       'drawing.dwg',
-      {
-        exportInvisibleLayers: true,
-        exportLayouts: false,
-        initialView: 'fit',
-        viewerMode: 'measure'
-      },
+      { ...defaultExportOptions, exportLayouts: false },
       context.view
     )
   })
@@ -210,11 +231,12 @@ describe('AcApExportHtmlCmd prompt defaults', () => {
   test('cancels export when the layouts prompt is cancelled', async () => {
     getKeywords
       .mockResolvedValueOnce(none())
+      .mockResolvedValueOnce(none())
       .mockResolvedValueOnce({ status: AcEdPromptStatus.Cancel })
 
     await cmd.execute(context)
 
-    expect(getKeywords).toHaveBeenCalledTimes(2)
+    expect(getKeywords).toHaveBeenCalledTimes(3)
     expect(AcApHtmlConvertor).not.toHaveBeenCalled()
   })
 
@@ -223,11 +245,12 @@ describe('AcApExportHtmlCmd prompt defaults', () => {
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
+      .mockResolvedValueOnce(none())
       .mockResolvedValueOnce({ status: AcEdPromptStatus.Cancel })
 
     await cmd.execute(context)
 
-    expect(getKeywords).toHaveBeenCalledTimes(4)
+    expect(getKeywords).toHaveBeenCalledTimes(5)
     expect(AcApHtmlConvertor).not.toHaveBeenCalled()
   })
 
@@ -237,14 +260,19 @@ describe('AcApExportHtmlCmd prompt defaults', () => {
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
       .mockResolvedValueOnce(none())
+      .mockResolvedValueOnce(none())
 
     await cmd.execute(context)
 
-    const invisibleLayersPrompt = getKeywords.mock.calls[0][0]
-    const layoutsPrompt = getKeywords.mock.calls[1][0]
-    const initialViewPrompt = getKeywords.mock.calls[2][0]
-    const viewerModePrompt = getKeywords.mock.calls[3][0]
+    const exportFormatPrompt = getKeywords.mock.calls[0][0]
+    const invisibleLayersPrompt = getKeywords.mock.calls[1][0]
+    const layoutsPrompt = getKeywords.mock.calls[2][0]
+    const initialViewPrompt = getKeywords.mock.calls[3][0]
+    const viewerModePrompt = getKeywords.mock.calls[4][0]
 
+    expect(exportFormatPrompt.keywords.default).toEqual(
+      expect.objectContaining({ global: 'Single' })
+    )
     expect(invisibleLayersPrompt.keywords.default).toEqual(
       expect.objectContaining({ global: 'Yes' })
     )

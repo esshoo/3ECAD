@@ -13,6 +13,8 @@ export default {
     lengthSection: 'Uzunluk',
     lengthType: 'Tür:',
     lengthPrecision: 'Hassasiyet:',
+    lengthUnit: 'Birim:',
+    lengthUnitFollowDrawing: 'Çizimi takip et',
     angleSection: 'Açı',
     angleType: 'Tür:',
     anglePrecision: 'Hassasiyet:',
@@ -69,6 +71,17 @@ export default {
   },
   exportHtmlDlg: {
     title: 'HTML Olarak Dışa Aktar',
+    tabData: 'Veri',
+    tabDisplay: 'Görünüm',
+    tabSecurity: 'Güvenlik',
+    exportFormat: 'Dışa aktarma biçimi',
+    exportFormatSingle: 'Tek dosyalı HTML',
+    exportFormatSingleHint: 'Çevrimdışı açılabilen tek .html dosyası',
+    exportFormatMulti: 'Çok dosyalı paket (ZIP)',
+    exportFormatMultiHint:
+      'Bir zip indirir; açıp barındırınca aşamalı yükleme yapılır. Parola ve süre yalnızca tek dosyalı HTML için geçerlidir',
+    securitySingleOnlyHint:
+      'Parola ve geçerlilik yalnızca tek dosyalı HTML dışa aktarımında kullanılabilir.',
     layersSection: 'Katmanlar',
     exportInvisibleLayers: 'Görünmez katmanları dışa aktar',
     exportInvisibleLayersHint:
@@ -90,7 +103,49 @@ export default {
       'Yalnızca kaydırma, yakınlaştırma ve katman kontrolleri',
     viewerModeMeasure: 'Ölçüm ve İnceleme',
     viewerModeMeasureHint:
-      'Görüntüleme araçlarına ek olarak ölçüm ve işaretleme'
+      'Görüntüleme araçlarına ek olarak ölçüm ve işaretleme',
+    expirySection: 'Geçerlilik',
+    expiry1Day: '1 gün',
+    expiry7Days: '7 gün',
+    expiry30Days: '30 gün',
+    expiryCustom: 'Özel',
+    expiryNever: 'Süresiz',
+    expiryCustomPlaceholder: 'Son geçerlilik tarihi ve saatini seçin',
+    expiryCustomRequired: 'Lütfen özel bir son geçerlilik tarihi ve saati seçin.',
+    expiryCustomPast: 'Özel son geçerlilik gelecekte olmalıdır.',
+    expiryHint:
+      'Geçerlilik süresi dolduktan sonra dışa aktarılan HTML artık açılamaz.',
+    passwordSection: 'Parola',
+    passwordPlaceholder: 'Parola yoksa boş bırakın',
+    passwordHint:
+      'Ayarlandığında HTML dosyasını açmak için doğru parola gerekir. Elle girin veya düğmeyle oluşturun.',
+    generatePassword: 'Oluştur',
+    copyPassword: 'Kopyala',
+    copyPasswordSuccess: 'Parola panoya kopyalandı.',
+    copyPasswordFailed: 'Parola panoya kopyalanamadı.'
+  },
+  exportPdfDlg: {
+    title: 'PDF\'e Dışa Aktar',
+    modelSpaceSection: 'Model alanı',
+    modelSpaceDisplay: 'Görüntü',
+    modelSpaceDisplayHint: 'Görünüm alanında şu an gösterilen içeriği dışa aktar',
+    modelSpaceExtents: 'Kapsam',
+    modelSpaceExtentsHint:
+      'Geçerli alandaki tüm nesnelerin kapsamını dışa aktar',
+    paperSpaceSection: 'Kağıt alanı',
+    exportLayouts: 'Yerleşimleri dışa aktar',
+    exportLayoutsHint:
+      'Kağıt alanı yerleşimlerini ek PDF sayfaları olarak dahil et',
+    textModeSection: 'Metin',
+    textMode: 'Metin işleme',
+    textModeText: 'Metin nesneleri',
+    textModeTextHint:
+      'Metni seçilebilir/aranabilir tutar ve dosyayı küçültür (SHX metin vektör kalır)',
+    textModeVector: 'Vektör konturlar',
+    textModeVectorHint:
+      'Metni çizgi ve dolguya dönüştürür, ekrana uygun, ancak dosya daha büyük',
+    yes: 'Evet',
+    no: 'Hayır'
   },
   quickSelectDlg: {
     title: 'Hızlı Seçim',

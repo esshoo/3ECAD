@@ -1,118 +1,64 @@
 import type {
   AcApLocale,
-  AcEdOpenMode,
-  AcEdUiTheme
+  AcEdUiLayoutKind,
+  AcEdUiTheme,
+  AcUiToolbarItemConfig,
+  AcUiToolbarOptions,
+  AcUiToolbarPlacement
 } from '@mlightcad/cad-simple-viewer'
 
-/** Toolbar edge placement relative to the viewer host element. */
-export type AcExToolbarPlacement = 'top' | 'bottom' | 'left' | 'right'
-
-/** Dock panel edge placement relative to the viewer host element. */
-export type AcExDockPanelSide = 'top' | 'bottom' | 'left' | 'right'
-
-/** Supported UI locale codes for plugin strings. */
-export type AcExLocale = 'en' | 'zh' | 'cs' | 'tr'
-
-/**
- * Controls how a parent button icon relates to its submenu selection.
- *
- * - `'fixed'`: parent keeps its own `icon` (default).
- * - `'selected'`: parent shows the selected child's `icon`.
- */
-export type AcExToolbarChildIconMode = 'fixed' | 'selected'
-
-/**
- * How nested `children` are presented when the parent button is clicked.
- *
- * - `'menu'`: popover dropdown with icon + label (default). Closes on outside click.
- * - `'toolbar'`: icon sub-toolbar beside the parent. Closes on canvas / outside click.
- * - `'sticky-toolbar'`: icon sub-toolbar that stays open until the parent button
- *   is clicked again. Canvas clicks do not dismiss it.
- */
-export type AcExToolbarChildrenUi = 'menu' | 'toolbar' | 'sticky-toolbar'
-
-/** Visual separator between toolbar button groups. */
-export interface AcExToolbarSeparator {
-  type: 'separator'
-  /** Optional stable id for debugging. */
-  id?: string
-}
-
-/** Reference to a built-in toolbar button when composing a custom layout. */
-export interface AcExToolbarPresetRef {
-  preset: string
-}
-
-/**
- * Configuration for a single toolbar button or submenu entry.
- */
-export interface AcExToolbarItem {
-  /** Stable identifier used for DOM attributes and debugging. */
-  id: string
-  /** When `'separator'`, renders a divider instead of a button. */
-  type?: 'button' | 'separator'
-  /** i18n key under the `simpleUi` namespace (for example `toolbar.select`). */
-  label?: string
-  /** Inline SVG string, DOM element, or factory that produces an icon element. */
-  icon?: string | HTMLElement | (() => HTMLElement)
-  /** CAD command string sent to {@link AcApDocManager.sendStringToExecute}. */
-  command?: string
-  /** Custom click handler. Used when no command is set (e.g. theme toggle). */
-  action?: () => void
-  /**
-   * Popover-style click handler that receives the anchor button element.
-   * When set, takes precedence over `command` and `action`.
-   */
-  anchorAction?: (anchor: HTMLElement) => void
-  /**
-   * When false, the button stays enabled without an open document.
-   * Defaults to true when `command` is set, otherwise false.
-   */
-  requiresDocument?: boolean
-  /** Minimum open mode required to show this item (Review shows in Review+Write). */
-  minOpenMode?: AcEdOpenMode
-  /** Static or dynamic disabled state evaluated at render time. */
-  disabled?: boolean | (() => boolean)
-  /** Nested submenu items shown when the button is clicked.
-   * May be a live getter so the list can depend on the active document. */
-  children?: AcExToolbarItem[]
-  /**
-   * Presentation of {@link children}. Defaults to `'menu'` (popover dropdown).
-   * Built-in Measure / Review use `'sticky-toolbar'`; Export, Toolbar
-   * Position, and Language use `'toolbar'`.
-   */
-  childrenUi?: AcExToolbarChildrenUi
-  /**
-   * When the button has `children`, controls whether the parent icon follows the
-   * selected submenu item. Defaults to `'fixed'`.
-   */
-  childIcon?: AcExToolbarChildIconMode
-  /** Initial submenu selection when {@link childIcon} is `'selected'`. */
-  selectedChildId?: string
-  /** Two-state button that merges `on` or `off` branch fields based on `getValue`. */
-  toggle?: {
-    /** Returns whether the toggle is in the "on" branch. */
-    getValue: () => boolean
-    /** Fields applied when `getValue` returns true. */
-    on: Partial<AcExToolbarItem>
-    /** Fields applied when `getValue` returns false. */
-    off: Partial<AcExToolbarItem>
-  }
-}
-
-/** Resolved toolbar entry: button, separator, or preset reference in config. */
-export type AcExToolbarItemConfig =
-  | AcExToolbarItem
-  | AcExToolbarSeparator
-  | AcExToolbarPresetRef
+export type {
+  AcUiSubToolbarOptions,
+  AcUiSubToolbarPosition,
+  AcUiToolbarChildIconMode,
+  AcUiToolbarChildrenUi,
+  AcUiToolbarChromeOptions,
+  AcUiToolbarDocState,
+  AcUiToolbarI18n,
+  AcUiToolbarItem,
+  AcUiToolbarItemConfig,
+  AcUiToolbarOptions,
+  AcUiToolbarOverflow,
+  AcUiToolbarPlacement,
+  AcUiToolbarPresetRef,
+  AcUiToolbarSeparator,
+  AcUiToolbarSize
+} from '@mlightcad/cad-simple-viewer'
 
 /** Toolbar item list passed to {@link AcApSimpleUiPlugin.setToolbarItems}. */
-export type AcExToolbarItemsInput = AcExToolbarItemConfig[] | 'default'
+export type AcUiToolbarItemsInput = AcUiToolbarItemConfig[] | 'default'
+
+/** Dock panel edge placement relative to the viewer host element. */
+export type AcUiDockPanelSide = 'top' | 'bottom' | 'left' | 'right'
+
+/** Supported UI locale codes for plugin strings. */
+export type AcUiLocale = 'en' | 'zh' | 'cs' | 'tr'
+
+/**
+ * Per-layout overrides for {@link AcUiSimpleUiPluginOptions.layouts}.
+ *
+ * Each entry's `toolbar` is merged on top of built-in defaults and the top-level
+ * {@link AcUiToolbarOptions} baseline (phone inherits only `enabled`,
+ * `mountTarget`, `inCanvasParent`, and `showButtonBorder` from the top-level
+ * toolbar — see {@link acuiMergeToolbarOptionsForLayout}).
+ */
+export interface AcUiLayoutOptions {
+  /** Toolbar configuration for this layout kind. */
+  toolbar?: AcUiToolbarOptions
+}
+
+/**
+ * How the plugin chooses among phone / pad / desktop chrome.
+ *
+ * - `'auto'`: follow viewport width via {@link acedGetUiLayout}
+ * - `'phone' | 'pad' | 'desktop'`: force a layout kind regardless of viewport
+ */
+export type AcUiPluginLayoutMode = 'auto' | AcEdUiLayoutKind
 
 /**
  * Callbacks supplied when building the default toolbar (theme, locale, and placement).
  */
-export interface AcExDefaultToolbarContext {
+export interface AcUiDefaultToolbarContext {
   /** Returns the current UI theme. */
   getTheme: () => AcEdUiTheme
   /** Applies a UI theme change. */
@@ -122,19 +68,41 @@ export interface AcExDefaultToolbarContext {
   /** Sets the application locale. */
   setLocale: (locale: AcApLocale) => void
   /** Returns the current toolbar edge placement. */
-  getPlacement: () => AcExToolbarPlacement
+  getPlacement: () => AcUiToolbarPlacement
   /** Moves the toolbar to the given host edge. */
-  setPlacement: (placement: AcExToolbarPlacement) => void
+  setPlacement: (placement: AcUiToolbarPlacement) => void
 }
 
 /**
- * Options passed to {@link createSimpleUiPlugin} and {@link registerSimpleUiPlugin}.
+ * Options passed to {@link acuiCreateSimpleUiPlugin} and {@link acuiRegisterSimpleUiPlugin}.
  */
-export interface AcExSimpleUiPluginOptions {
+export interface AcUiSimpleUiPluginOptions {
   /** Viewer host element; defaults to the active view container or `document.body`. */
   host?: HTMLElement
   /** @deprecated Locale follows {@link AcApI18n.currentLocale} automatically. */
-  locale?: AcExLocale
+  locale?: AcUiLocale
+  /**
+   * Layout mode. `'auto'` follows viewport width; otherwise forces one kind.
+   * @default 'auto'
+   */
+  layout?: AcUiPluginLayoutMode
+  /**
+   * Per-layout toolbar overrides. Merged on top of built-in defaults and the
+   * top-level {@link toolbar} baseline.
+   *
+   * Keys match {@link AcEdUiLayoutKind}. Phone overrides replace phone built-ins;
+   * pad/desktop overrides replace the full top-level toolbar for that kind.
+   * Pad built-ins exclude `select` and `pan`; restore them with
+   * `layouts.pad.toolbar.excludeItems: []`.
+   */
+  layouts?: {
+    /** Overrides when {@link AcApSimpleUiPlugin.getLayout} resolves to phone. */
+    phone?: AcUiLayoutOptions
+    /** Overrides when {@link AcApSimpleUiPlugin.getLayout} resolves to pad. */
+    pad?: AcUiLayoutOptions
+    /** Overrides when {@link AcApSimpleUiPlugin.getLayout} resolves to desktop. */
+    desktop?: AcUiLayoutOptions
+  }
   /** Chrome DevTools-style dock panel configuration. */
   dockPanel?: {
     /** Explicitly enable the dock panel container. */
@@ -142,7 +110,7 @@ export interface AcExSimpleUiPluginOptions {
     /** @default false */
     defaultOpen?: boolean
     /** @default 'left' */
-    defaultSide?: AcExDockPanelSide
+    defaultSide?: AcUiDockPanelSide
     /** Bottom dock default height in px. @default 240 */
     defaultHeight?: number
     /** Left/right dock default width in px. @default 280 */
@@ -153,38 +121,15 @@ export interface AcExSimpleUiPluginOptions {
      */
     mountTarget?: HTMLElement
   }
-  /** Toolbar configuration. Enabled by default. */
-  toolbar?: {
-    /** When false, the toolbar is not created. */
-    enabled?: boolean
-    /** Edge placement relative to `host`. */
-    placement?: AcExToolbarPlacement
-    /** Toolbar items, `'default'`, or a custom list (may include presets and separators). */
-    items?: AcExToolbarItemConfig[] | 'default'
-    /** Extra items merged into `items` (default: appended at the end). */
-    appendItems?: AcExToolbarItemConfig[]
-    /**
-     * Insert `appendItems` after the root toolbar item with this id.
-     * Ignored when {@link appendItemsBefore} is set.
-     */
-    appendItemsAfter?: string
-    /**
-     * Insert `appendItems` before the root toolbar item with this id.
-     * Takes precedence over {@link appendItemsAfter}.
-     */
-    appendItemsBefore?: string
-    /** When true, show a collapse/expand toggle at the end of the toolbar. */
-    collapsible?: boolean
-    /** Initial collapsed state when {@link collapsible} is true. */
-    defaultCollapsed?: boolean
-    /**
-     * Canvas element that receives the floating toolbar.
-     * Defaults to the active view container when it is inside `host`.
-     */
-    mountTarget?: HTMLElement
-    /** Inset from the canvas edge in px. @default 8 */
-    edgeOffset?: number
-  }
+  /**
+   * Toolbar baseline configuration. Applied fully to pad/desktop. Phone inherits
+   * only {@link AcUiToolbarOptions.mountTarget}, `enabled`,
+   * {@link AcUiToolbarOptions.inCanvasParent}, and
+   * {@link AcUiToolbarOptions.showButtonBorder} from this baseline; phone chrome
+   * and items come from built-in phone defaults plus
+   * {@link layouts.phone.toolbar} (append items are not inherited on phone).
+   */
+  toolbar?: AcUiToolbarOptions
 }
 
 /** Plugin identifier registered with {@link AcApPluginManager}. */

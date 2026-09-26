@@ -1,18 +1,35 @@
 import type { AcTrView2d } from '@mlightcad/cad-simple-viewer'
 
+import type { AcApHtmlExpiryDays } from './AcExHtmlAccess'
 import type {
   AcExInitialViewMode,
   AcExViewerMode,
   AcExViewState
 } from './AcExSnapshotTypes'
 
+export type { AcApHtmlExpiryDays } from './AcExHtmlAccess'
+
 /** Matches the offline HTML viewer orthographic half-height in world units. */
 const HTML_VIEWER_CAMERA_FRUSTUM = 400
+
+/**
+ * HTML export packaging mode.
+ *
+ * - `single` — one self-contained `.html` (default). Small drawings embed a
+ *   monolithic ACEX snapshot; large drawings embed progressive ACEC chunks.
+ * - `multi` — multi-file ACEX package zipped as one `.zip` download; unzip before hosting.
+ */
+export type AcApHtmlExportFormat = 'single' | 'multi'
 
 /**
  * User-configurable options for HTML export (`-chtml`, dialog, and CLI).
  */
 export interface AcApHtmlExportOptions {
+  /**
+   * Packaging mode. Defaults to `'single'`.
+   * Password and expiry apply only to `'single'`.
+   */
+  exportFormat?: AcApHtmlExportFormat
   /**
    * When `true`, off/frozen layers are converted and written into the snapshot.
    * Defaults to `true` for backward compatibility with pre-option HTML export.
@@ -34,6 +51,24 @@ export interface AcApHtmlExportOptions {
    * and markup UI for a smaller, faster HTML file. Defaults to `'measure'`.
    */
   viewerMode?: AcExViewerMode
+  /**
+   * How long the exported HTML remains valid. Defaults to `'never'`.
+   * Use `'custom'` with {@link AcApHtmlExportOptions.expiresAt} for an absolute time.
+   * Ignored when {@link AcApHtmlExportOptions.exportFormat} is `'multi'`.
+   */
+  expiryDays?: AcApHtmlExpiryDays
+  /**
+   * Absolute expiry timestamp (Unix ms). Used when {@link AcApHtmlExportOptions.expiryDays}
+   * is `'custom'`. Ignored for relative periods and `'never'`.
+   * Ignored when {@link AcApHtmlExportOptions.exportFormat} is `'multi'`.
+   */
+  expiresAt?: number | null
+  /**
+   * Optional password required to open the exported HTML. When set, the snapshot
+   * or each embedded progressive chunk is AES-GCM encrypted.
+   * Ignored when {@link AcApHtmlExportOptions.exportFormat} is `'multi'`.
+   */
+  password?: string
 }
 
 /**
@@ -41,12 +76,24 @@ export interface AcApHtmlExportOptions {
  */
 export function resolveAcApHtmlExportOptions(
   options: AcApHtmlExportOptions = {}
-): Required<AcApHtmlExportOptions> {
+): Required<
+  Omit<AcApHtmlExportOptions, 'password' | 'expiryDays' | 'expiresAt'>
+> & {
+  expiryDays: AcApHtmlExpiryDays
+  expiresAt: number | null
+  password: string
+} {
+  const exportFormat: AcApHtmlExportFormat =
+    options.exportFormat === 'multi' ? 'multi' : 'single'
   return {
+    exportFormat,
     exportInvisibleLayers: options.exportInvisibleLayers !== false,
     exportLayouts: options.exportLayouts !== false,
     initialView: options.initialView ?? 'fit',
-    viewerMode: options.viewerMode ?? 'measure'
+    viewerMode: options.viewerMode ?? 'measure',
+    expiryDays: exportFormat === 'multi' ? 'never' : (options.expiryDays ?? 'never'),
+    expiresAt: exportFormat === 'multi' ? null : (options.expiresAt ?? null),
+    password: exportFormat === 'multi' ? '' : (options.password?.trim() ?? '')
   }
 }
 /**

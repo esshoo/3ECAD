@@ -95,7 +95,7 @@ export class AcTrMTextRenderer {
    */
   setFontUrl(value: string) {
     this._fontUrl = value
-    this.applyFontUrl()
+    void this.applyFontUrl()
   }
 
   /**
@@ -140,6 +140,22 @@ export class AcTrMTextRenderer {
     this._awaitFontsBeforeDraw = enabled
     FontManager.instance.awaitFontsBeforeDraw = enabled
     await this.applyAwaitFontsBeforeDraw()
+  }
+
+  /**
+   * Replaces session-scoped missed-font bookkeeping on the main thread and workers.
+   */
+  async replaceMissedFonts(fonts: Record<string, number>): Promise<void> {
+    if (this._renderer) {
+      await this._renderer.replaceMissedFonts(fonts)
+      return
+    }
+    FontManager.instance.replaceMissedFonts(fonts)
+  }
+
+  /** Clears session-scoped missed-font bookkeeping on the main thread and workers. */
+  async clearMissedFonts(): Promise<void> {
+    await this.replaceMissedFonts({})
   }
 
   /**
@@ -249,7 +265,7 @@ export class AcTrMTextRenderer {
       this._renderer.setDefaultMode(this._renderMode)
     }
 
-    this.applyFontUrl()
+    void this.applyFontUrl()
     void this.applyDefaultFonts()
     void this.applyLazyFontLoading()
     void this.applyAwaitFontsBeforeDraw()
@@ -313,9 +329,9 @@ export class AcTrMTextRenderer {
     }
   }
 
-  private applyFontUrl() {
+  private async applyFontUrl() {
     if (this._renderer && this._fontUrl) {
-      this._renderer.setFontUrl(this._fontUrl)
+      await this._renderer.setFontUrl(this._fontUrl)
     }
   }
 

@@ -27,6 +27,7 @@ import {
   AcEdPromptPointOptions,
   AcEdPromptStatus
 } from '../../editor'
+import { acedIsMobileOrPadUi } from '../../editor/global/AcEdUiLayout'
 import { AcApI18n } from '../../i18n'
 import type { AcTrView2d } from '../../view'
 import {
@@ -37,6 +38,7 @@ import {
   acapStrokeLivePolyline,
   acapStrokeLiveSegment
 } from '../overlay/AcApHtmlLivePreview'
+import { acapSyncLiveOverlayTextHeight } from '../overlay/AcApOverlayDrawUtil'
 import { promptMarkupCapsuleText } from './AcApMarkupCmdUtil'
 import {
   markupCloudVertices,
@@ -49,8 +51,9 @@ import type {
 } from './AcApMarkupTypes'
 import {
   defaultMarkupColor,
+  defaultMarkupStyle,
   getMarkupFontSize,
-  getMarkupLineWeight,
+  MARKUP_LINE_WEIGHT,
   markupCanvasLineWidth,
   subscribeMarkupDrawStyle
 } from './AcApMarkupUtil'
@@ -192,8 +195,22 @@ function cloudLivePoints(
  * keeps the shape visible, auto-updates leader tip on the outline, and shows
  * leader (no arrow) + text bubble following the cursor.
  */
+/** Options for {@link promptAttachedCallout}. */
+export interface AcApPromptAttachedCalloutOptions {
+  /** Prompt even when the session Callout option is off. */
+  force?: boolean
+  /**
+   * When false, do not redraw the shape in the live preview (it is already
+   * on screen). Default true.
+   */
+  previewShape?: boolean
+  /** Initial cursor direction used to place the leader tip on the outline. */
+  toward?: AcApMarkupPoint2d
+}
+
 class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
   private readonly _outline: AcApMarkupShapeOutline
+  private readonly _previewShape: boolean
   private readonly _ht: AcTrHtmlTransientManager
   private readonly _tipDot: AcTrHtmlDot
   private readonly _bubble: AcTrHtmlCallout
@@ -204,24 +221,30 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
   private _tip: AcApMarkupPoint2d
   private _anchor: AcApMarkupPoint2d
   private _color: AcCmColor
+  private _capsuleRevealed = false
+  /** Desktop: wait for a real pointer move before showing the capsule preview. */
+  private _desktopMoveArm?: (e: PointerEvent) => void
   private _unsubDrawStyle?: () => void
 
   constructor(
     view: AcEdBaseView,
     outline: AcApMarkupShapeOutline,
-    color: AcCmColor
+    color: AcCmColor,
+    options?: Pick<AcApPromptAttachedCalloutOptions, 'previewShape' | 'toward'>
   ) {
     super(view)
     this._view = view as AcTrView2d
     this._outline = outline
+    this._previewShape = options?.previewShape !== false
     this._color = color
     this._ht = this._view.htmlTransientManager
 
     const center = shapeCenter(outline)
-    this._tip = computeLeaderTipOnShape(outline, {
+    const toward = options?.toward ?? {
       x: center.x + 1,
       y: center.y
-    })
+    }
+    this._tip = computeLeaderTipOnShape(outline, toward)
     this._anchor = { ...this._tip }
 
     const stamp = Date.now()
@@ -247,6 +270,10 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
       layoutId
     })
     this._ht.add(this._bubble)
+    // `add()` applies layout visibility. Keep the empty capsule off until a
+    // live preview starts (desktop mouse move / mobile long-press capture).
+    this._bubble.object.visible = false
+    acapSyncLiveOverlayTextHeight(this._view, [this._bubble], defaultMarkupStyle())
 
     this._preview = new AcApHtmlLivePreview(
       this._view,
@@ -256,6 +283,7 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
     this._unsubDrawStyle = subscribeMarkupDrawStyle(() =>
       this.applyCurrentStyle()
     )
+    this.armDesktopCapsulePreview()
     this.paintPreview()
     this._view.isHtmlDirty = true
   }
@@ -272,6 +300,10 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
 
     this._tipDot.setPosition(this._tip)
     this._bubble.setPosition(toward)
+    this.syncCapsulePreviewVisibility()
+    const style = defaultMarkupStyle()
+    this._bubble.setFontSize(style.fontSize ?? getMarkupFontSize())
+    acapSyncLiveOverlayTextHeight(this._view, [this._bubble], style)
     this.paintPreview()
     this._view.isHtmlDirty = true
   }
@@ -279,6 +311,43 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
   /** Capsule used for in-place text entry after the bubble is placed. */
   get capsule(): AcTrHtmlCallout {
     return this._bubble
+  }
+
+  /** Show the capsule for text entry (or if the user confirmed without a drag). */
+  revealCapsule(): void {
+    this.disarmDesktopCapsulePreview()
+    this._capsuleRevealed = true
+    this._bubble.object.visible = true
+    this._view.isHtmlDirty = true
+  }
+
+  /**
+   * Desktop: show after the user moves the mouse (ignore leftover cursor from
+   * `showAt`). Mobile: show as soon as long-press capture starts jig updates.
+   */
+  private syncCapsulePreviewVisibility(): void {
+    if (!this._capsuleRevealed && acedIsMobileOrPadUi()) {
+      this._capsuleRevealed = true
+    }
+    this._bubble.object.visible = this._capsuleRevealed
+  }
+
+  private armDesktopCapsulePreview(): void {
+    if (acedIsMobileOrPadUi()) return
+    const canvas = this._view.canvas
+    this._desktopMoveArm = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return
+      // Only arm; `update()` applies visibility at the live cursor position.
+      this._capsuleRevealed = true
+      this.disarmDesktopCapsulePreview()
+    }
+    canvas.addEventListener('pointermove', this._desktopMoveArm)
+  }
+
+  private disarmDesktopCapsulePreview(): void {
+    if (!this._desktopMoveArm) return
+    this._view.canvas.removeEventListener('pointermove', this._desktopMoveArm)
+    this._desktopMoveArm = undefined
   }
 
   /**
@@ -291,6 +360,7 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
 
   /** Remove frozen preview graphics after text entry (or cancel). */
   disposePreview() {
+    this.disarmDesktopCapsulePreview()
     this._unsubDrawStyle?.()
     this._unsubDrawStyle = undefined
     this._preview.acapDispose()
@@ -304,7 +374,9 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
     this._color = defaultMarkupColor()
     this._tipDot.setColor(this._color)
     this._bubble.setColor(this._color)
-    this._bubble.setFontSize(getMarkupFontSize())
+    const style = defaultMarkupStyle()
+    this._bubble.setFontSize(style.fontSize ?? getMarkupFontSize())
+    acapSyncLiveOverlayTextHeight(this._view, [this._bubble], style)
     this.paintPreview()
     this._view.isHtmlDirty = true
   }
@@ -312,39 +384,42 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
   private paintPreview(): void {
     const outline = this._outline
     const color = this._color
-    const lineWidth = markupCanvasLineWidth(getMarkupLineWeight())
+    const lineWidth = markupCanvasLineWidth(MARKUP_LINE_WEIGHT)
     const tip = this._tip
     const anchor = this._anchor
     const viewForCloud = this._view
 
+    const previewShape = this._previewShape
     this._preview.acapSetDraw((ctx, view) => {
-      if (outline.kind === 'circle') {
-        acapStrokeLiveCircle(
-          ctx,
-          view,
-          outline.center,
-          outline.radius,
-          color,
-          lineWidth
-        )
-      } else if (outline.kind === 'cloud') {
-        const points = cloudLivePoints(
-          outline.corner1,
-          outline.corner2,
-          viewForCloud
-        )
-        acapStrokeLivePolyline(ctx, view, points, color, lineWidth, {
-          closed: true
-        })
-      } else {
-        acapStrokeLivePolyline(
-          ctx,
-          view,
-          acapLiveRectCorners(outline.corner1, outline.corner2),
-          color,
-          lineWidth,
-          { closed: true }
-        )
+      if (previewShape) {
+        if (outline.kind === 'circle') {
+          acapStrokeLiveCircle(
+            ctx,
+            view,
+            outline.center,
+            outline.radius,
+            color,
+            lineWidth
+          )
+        } else if (outline.kind === 'cloud') {
+          const points = cloudLivePoints(
+            outline.corner1,
+            outline.corner2,
+            viewForCloud
+          )
+          acapStrokeLivePolyline(ctx, view, points, color, lineWidth, {
+            closed: true
+          })
+        } else {
+          acapStrokeLivePolyline(
+            ctx,
+            view,
+            acapLiveRectCorners(outline.corner1, outline.corner2),
+            color,
+            lineWidth,
+            { closed: true }
+          )
+        }
       }
       // Design Review style: leader without arrowhead.
       acapStrokeLiveSegment(ctx, view, tip, anchor, color, lineWidth)
@@ -356,15 +431,22 @@ class AcApMarkupShapeCalloutJig extends AcEdPreviewJig<AcGePoint3dLike> {
  * After a shape is placed, if the callout option is on, prompt for text
  * location (leader tip is auto-computed on the outline). Returns undefined
  * when the option is off or cancelled.
+ *
+ * Pass {@link AcApPromptAttachedCalloutOptions.force} when attaching a
+ * callout to an existing shape from the callout command.
  */
 export async function promptAttachedCallout(
   context: AcApContext,
-  outline: AcApMarkupShapeOutline
+  outline: AcApMarkupShapeOutline,
+  options?: AcApPromptAttachedCalloutOptions
 ): Promise<AcApMarkupAttachedCallout | undefined> {
-  if (!shapeCalloutEnabled) return undefined
+  if (!options?.force && !shapeCalloutEnabled) return undefined
 
   const color = defaultMarkupColor()
-  const jig = new AcApMarkupShapeCalloutJig(context.view, outline, color)
+  const jig = new AcApMarkupShapeCalloutJig(context.view, outline, color, {
+    previewShape: options?.previewShape,
+    toward: options?.toward
+  })
 
   try {
     const anchorPrompt = new AcEdPromptPointOptions(
@@ -382,7 +464,10 @@ export async function promptAttachedCallout(
       y: anchor.y
     })
 
-    const text = await promptMarkupCapsuleText(jig.capsule)
+    jig.revealCapsule()
+    const text = await promptMarkupCapsuleText(jig.capsule, {
+      messageKey: 'jig.markup.callout.content'
+    })
 
     return {
       tip,
