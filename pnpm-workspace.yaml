@@ -8,10 +8,11 @@ allowBuilds:
   unrs-resolver: true
   vue-demi: true
 overrides:
-  '@mlightcad/data-model': '^1.14.13'
-  '@mlightcad/libredwg-converter': '^3.14.13'
-  '@mlightcad/mtext-input-box': '^0.2.30'
-  '@mlightcad/mtext-renderer': '^0.12.13'
+  '@mlightcad/data-model': 'https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz'
+  '@mlightcad/libredwg-converter': 'https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz'
+  '@mlightcad/mtext-input-box': '^0.3.1'
+  '@mlightcad/mtext-parser': '^1.5.3'
+  '@mlightcad/mtext-renderer': '^0.13.1'
   '@mlightcad/ribbon': '^0.1.13'
   '@mlightcad/ui-components': '^0.1.11'
   element-plus: '^2.12.0'

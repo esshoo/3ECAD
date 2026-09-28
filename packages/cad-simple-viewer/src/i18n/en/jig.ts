@@ -1213,6 +1213,16 @@ export default {
         local: 'Original',
         global: 'Original'
       },
+      saved: {
+        display: 'Saved(V)',
+        local: 'Saved',
+        global: 'Saved'
+      },
+      smart: {
+        display: 'Smart(I)',
+        local: 'Smart',
+        global: 'Smart'
+      },
       scale: {
         display: 'Scale(S)',
         local: 'Scale',
@@ -1226,7 +1236,7 @@ export default {
     }
   },
   chtml: {
-    exportFormat: 'Export format [Single(S)/Multi-file package(M)]',
+    exportFormat: 'Export format',
     exportInvisibleLayers: 'Export invisible layers',
     exportLayouts: 'Export layouts',
     initialView: 'Initial view when opening HTML',
@@ -1275,9 +1285,9 @@ export default {
     }
   },
   cpdf: {
-    modelSpaceFit: 'Model space frame [Extents(E)/Display(D)]',
+    modelSpaceFit: 'Model space frame',
     exportLayouts: 'Export layouts',
-    textMode: 'Text rendering [Text(T)/Vector(V)]',
+    textMode: 'Text rendering',
     keywords: {
       extents: {
         display: 'Extents(E)',
