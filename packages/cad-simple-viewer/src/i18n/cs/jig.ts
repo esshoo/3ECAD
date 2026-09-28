@@ -1210,6 +1210,16 @@ export default {
         local: 'Původní',
         global: 'Original'
       },
+      saved: {
+        display: 'Uložený(V)',
+        local: 'Uložený',
+        global: 'Saved'
+      },
+      smart: {
+        display: 'Chytrý(I)',
+        local: 'Chytrý',
+        global: 'Smart'
+      },
       scale: {
         display: 'Měřítko(S)',
         local: 'Měřítko',
@@ -1223,7 +1233,7 @@ export default {
     }
   },
   chtml: {
-    exportFormat: 'Formát exportu [Jeden soubor(S)/Vícesouborový balíček(M)]',
+    exportFormat: 'Formát exportu',
     exportInvisibleLayers: 'Exportovat neviditelné hladiny',
     exportLayouts: 'Exportovat rozvržení',
     initialView: 'Počáteční pohled při otevření HTML',
@@ -1272,9 +1282,9 @@ export default {
     }
   },
   cpdf: {
-    modelSpaceFit: 'Rám modelového prostoru [Rozsah(E)/Zobrazení(D)]',
+    modelSpaceFit: 'Rám modelového prostoru',
     exportLayouts: 'Exportovat rozvržení',
-    textMode: 'Vykreslení textu [Text(T)/Vektor(V)]',
+    textMode: 'Vykreslení textu',
     keywords: {
       extents: {
         display: 'Rozsah(E)',

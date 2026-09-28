@@ -31,6 +31,7 @@ import {
   AcTrGlyphEntity,
   AcTrGroup,
   AcTrHtmlTransientManager,
+  AcTrMTextRenderer,
   AcTrRenderer,
   AcTrViewportView,
   hasPendingComplexLineTypeGlyphs
@@ -99,6 +100,7 @@ import {
   unionGroupWcsChildBoxes
 } from './AcTrGroupWcsBboxAssert'
 import { AcTrInheritedLayerMaterialMapper } from './AcTrInheritedLayerMaterialMapper'
+import { computeIntelligentExtents } from './AcTrIntelligentExtents'
 import { AcTrLayer } from './AcTrLayer'
 import { AcTrLayerAppearanceController } from './AcTrLayerAppearanceController'
 import { AcTrLayout } from './AcTrLayout'
@@ -243,6 +245,21 @@ export class AcTrView2d extends AcEdBaseView {
    * wasted conversion work — this set skips re-entry until the current pass ends.
    */
   private readonly _convertingLayers = new Set<string>()
+  /**
+   * Object ids claimed by an in-flight interactive {@link batchConvert},
+   * including deferred glyph commits that have not yet called
+   * {@link AcTrScene.addEntity}. Without this, a second convert pass can
+   * append another batched slot for the same id (visible as doubled TEXT
+   * linetype labels) because {@link hasEntity} is still false.
+   */
+  private readonly _claimedConvertObjectIds = new Set<string>()
+  /**
+   * Per-objectId convert generation. Bumped by {@link updateEntity} so an
+   * in-flight progressive {@link batchConvert} / deferred commit for the same
+   * id cannot `addEntity` after the scene was cleared for reconversion
+   * (ghost RasterImage / pre-replacement pixels).
+   */
+  private readonly _entityConvertGeneration = new Map<string, number>()
   /**
    * When true, entity conversion during document open yields cooperatively so
    * geometry paints incrementally while the open overlay is still visible.
@@ -1555,6 +1572,38 @@ export class AcTrView2d extends AcEdBaseView {
   /**
    * @inheritdoc
    */
+  zoomToSmartExtents(timeout: number = 0) {
+    const waiter = new AcEdConditionWaiter(
+      () => !this.isProcessingEntities,
+      () => {
+        const smart = this.resolveSmartFitBox()
+        if (smart) {
+          this.zoomTo(smart)
+          this._isDirty = true
+          this.endProgressiveOpenFit()
+          return
+        }
+        this._progressiveOpenFit.applyFinalFit(() => this.resolveLayoutFitBox())
+        this.endProgressiveOpenFit()
+      },
+      300,
+      timeout
+    )
+    waiter.start()
+  }
+
+  /**
+   * Resolves intelligent zoom extents from spatial-index entity boxes.
+   */
+  private resolveSmartFitBox(): AcGeBox2d | undefined {
+    const activeLayout = this._scene.activeLayout
+    if (!activeLayout) return undefined
+    return computeIntelligentExtents(activeLayout.collectSpatialExtentBoxes())
+  }
+
+  /**
+   * @inheritdoc
+   */
   flyTo(point: AcGePoint2dLike, scale: number) {
     this.activeLayoutView.flyTo(point, scale)
     this._isDirty = true
@@ -2165,6 +2214,20 @@ export class AcTrView2d extends AcEdBaseView {
 
     for (let i = 0; i < entities.length; ++i) {
       const item = entities[i]
+      const objectId = String(item.objectId ?? '')
+      if (objectId) {
+        // Invalidate in-flight commits for this id before releasing the claim /
+        // clearing the scene, so a stale progressive convert cannot re-add the
+        // pre-update drawable after (or instead of) the reconversion pass.
+        this._entityConvertGeneration.set(
+          objectId,
+          (this._entityConvertGeneration.get(objectId) ?? 0) + 1
+        )
+        // Allow reconversion: open-time batchConvert claims objectIds to prevent
+        // duplicate progressive slots. updateEntity must release that claim or
+        // batchConvert skips the entity (scene already cleared → blank RasterImage).
+        this._claimedConvertObjectIds.delete(objectId)
+      }
       if (this._scene.hasEntity(item.objectId)) {
         this._scene.removeEntity(item.objectId)
       }
@@ -2179,6 +2242,7 @@ export class AcTrView2d extends AcEdBaseView {
         this.highlight(selectedIds)
       }
       this._gripManager.refresh()
+      this._isDirty = true
     })()
     this._isDirty = true
     // Not sure why texture for image entity isn't updated even if 'isDirty' flag is already set to true.
@@ -2351,6 +2415,8 @@ export class AcTrView2d extends AcEdBaseView {
     this.clearFontLoadedRedrawTimer()
     this._convertQueue.length = 0
     this._numOfEntitiesToProcess = 0
+    this._claimedConvertObjectIds.clear()
+    this._entityConvertGeneration.clear()
     this.cancelOpenLineworkFrame()
     this.resetDeferredGeometryQueue()
     this._entityProcessingIdleAt = 0
@@ -2393,6 +2459,8 @@ export class AcTrView2d extends AcEdBaseView {
     this.cancelOpenLineworkFrame()
     this._convertQueue.length = 0
     this._numOfEntitiesToProcess = 0
+    this._claimedConvertObjectIds.clear()
+    this._entityConvertGeneration.clear()
     this.resetDeferredGeometryQueue()
     this._entityProcessingIdleAt = 0
     this._scene = state.scene
@@ -2424,6 +2492,8 @@ export class AcTrView2d extends AcEdBaseView {
     this.cancelOpenLineworkFrame()
     this._convertQueue.length = 0
     this._numOfEntitiesToProcess = 0
+    this._claimedConvertObjectIds.clear()
+    this._entityConvertGeneration.clear()
     this.resetDeferredGeometryQueue()
     this._entityProcessingIdleAt = 0
     this._scene = this.createScene()
@@ -2942,21 +3012,31 @@ export class AcTrView2d extends AcEdBaseView {
     try {
       names = database.tables.textStyleTable.fonts ?? []
     } catch {
+      names = []
+    }
+    // Style fonts alone are not enough: awaitFontsBeforeDraw only *awaits*
+    // content/style faces and kicks default/symbol fallbacks in the background.
+    // Drawings with empty primary font files (font falls back to the STYLE name)
+    // need those fallbacks loaded before the first glyph bake, otherwise Latin
+    // (and often all) text is permanently baked as '?'.
+    const fallbackFonts = FontManager.instance.getFontsToLoad()
+    const preloadNames = [...new Set([...names, ...fallbackFonts])]
+    if (preloadNames.length === 0) {
       this._textStyleFontPreloadPromise = Promise.resolve()
       return
     }
-    if (names.length === 0) {
-      this._textStyleFontPreloadPromise = Promise.resolve()
-      return
-    }
-    this._textStyleFontPreloadPromise = FontManager.instance
-      .requestFonts(names)
-      .then(
-        () => {},
-        () => {
-          // Glyph draw still falls back via FontManager defaults / '?'.
-        }
-      )
+    const mtextRenderer = AcTrMTextRenderer.getInstance()
+    this._textStyleFontPreloadPromise = Promise.all([
+      FontManager.instance.requestFonts(preloadNames),
+      // Worker isolates have their own FontManager; main-thread requestFonts
+      // alone does not populate them before asyncRenderMText.
+      mtextRenderer.loadFonts(fallbackFonts)
+    ]).then(
+      () => {},
+      () => {
+        // Glyph draw still falls back via FontManager defaults / '?'.
+      }
+    )
   }
 
   /**
@@ -3124,10 +3204,15 @@ export class AcTrView2d extends AcEdBaseView {
       return
     }
 
-    const msSinceIdle =
-      this._entityProcessingIdleAt > 0
-        ? performance.now() - this._entityProcessingIdleAt
-        : null
+    // Font load before the first convert idle (empty scene, ENTITY stream not
+    // started yet). Glyph jobs await that font. regen() here replays the
+    // in-flight database: measured as thousands of duplicate convert claims
+    // and a ~1GB heap spike at the start of open.
+    if (this._entityProcessingIdleAt <= 0) {
+      return
+    }
+
+    const msSinceIdle = performance.now() - this._entityProcessingIdleAt
     // Open-time text awaits its fonts, then this debounced callback runs.
     // Regen here only flashes the loading spinner again after
     // "Rendering drawing ..." has already hidden (progressive rendering on).
@@ -3352,30 +3437,58 @@ export class AcTrView2d extends AcEdBaseView {
           continue
         }
 
+        // Interactive open can enqueue the same objectId twice (layout/chunk
+        // re-queue) while deferred glyph commit has not yet called addEntity.
+        // Re-expanding then appends a second batched slot → doubled TEXT labels.
+        // Claim the id as soon as convert starts so later passes skip it.
+        const objectId = String(entity.objectId ?? '')
+        let convertGen = 0
+        if (!options.forExport) {
+          if (
+            objectId &&
+            (this.hasEntity(objectId) ||
+              this._claimedConvertObjectIds.has(objectId))
+          ) {
+            continue
+          }
+          if (objectId) {
+            this._claimedConvertObjectIds.add(objectId)
+            convertGen = this._entityConvertGeneration.get(objectId) ?? 0
+          }
+        }
+
         // Fast path: entities that declare a single batchable primitive append
         // directly into batches, skipping temporary drawable allocate → clone → dispose.
         const directMeta = tryBuildDirectEntityMeta(entity, this._renderer)
         if (directMeta) {
           let added = false
+          let superseded = false
           try {
-            added = this._scene.addDirectEntity(
-              directMeta,
-              shouldExtendBboxForDirectEntity(entity)
-            )
-            if (added) {
-              this.applySessionHiddenObjectState(entity.objectId)
-              if (progressive) {
-                this.markProgressiveDirty()
-                this._progressiveOpenFit.afterGeometryBatch(
-                  () => this.resolveLayoutFitBox(),
-                  i
-                )
+            if (
+              objectId &&
+              (this._entityConvertGeneration.get(objectId) ?? 0) !== convertGen
+            ) {
+              superseded = true
+            } else {
+              added = this._scene.addDirectEntity(
+                directMeta,
+                shouldExtendBboxForDirectEntity(entity)
+              )
+              if (added) {
+                this.applySessionHiddenObjectState(entity.objectId)
+                if (progressive) {
+                  this.markProgressiveDirty()
+                  this._progressiveOpenFit.afterGeometryBatch(
+                    () => this.resolveLayoutFitBox(),
+                    i
+                  )
+                }
               }
             }
           } finally {
             directMeta.geometry.dispose()
           }
-          if (added) {
+          if (superseded || added) {
             continue
           }
           // Append refused (e.g. invisible) — fall through to the legacy path.
@@ -3417,7 +3530,8 @@ export class AcTrView2d extends AcEdBaseView {
                   this.handleGroup(
                     threeEntity as AcTrGroup,
                     progressive,
-                    epoch
+                    epoch,
+                    convertGen
                   ),
                 epoch
               )
@@ -3425,7 +3539,8 @@ export class AcTrView2d extends AcEdBaseView {
               await this.handleGroup(
                 threeEntity as AcTrGroup,
                 progressive,
-                epoch
+                epoch,
+                convertGen
               )
             }
           } else {
@@ -3435,6 +3550,14 @@ export class AcTrView2d extends AcEdBaseView {
             const commitEntity = async () => {
               await this.finishEntityGeometry(threeEntity, progressive)
               if (epoch !== this._convertEpoch) {
+                threeEntity.dispose()
+                return
+              }
+              if (
+                objectId &&
+                (this._entityConvertGeneration.get(objectId) ?? 0) !==
+                  convertGen
+              ) {
                 threeEntity.dispose()
                 return
               }
@@ -3494,6 +3617,8 @@ export class AcTrView2d extends AcEdBaseView {
           const fileName = entity.imageFileName
           if (fileName && !entity.image) {
             this._missedImages.set(entity.objectId, fileName)
+          } else if (entity.image) {
+            this._missedImages.delete(entity.objectId)
           }
         }
       } catch (error) {
@@ -3554,10 +3679,19 @@ export class AcTrView2d extends AcEdBaseView {
   private async handleGroup(
     group: AcTrGroup,
     progressive: boolean,
-    epoch: number = this._convertEpoch
+    epoch: number = this._convertEpoch,
+    convertGen: number = 0
   ) {
     await this.finishEntityGeometry(group, progressive)
     if (epoch !== this._convertEpoch) {
+      group.dispose()
+      return
+    }
+    const objectId = String(group.objectId ?? '')
+    if (
+      objectId &&
+      (this._entityConvertGeneration.get(objectId) ?? 0) !== convertGen
+    ) {
       group.dispose()
       return
     }
@@ -3615,6 +3749,12 @@ export class AcTrView2d extends AcEdBaseView {
     if (groupChildBoxes.length > 0) {
       group.wcsBbox = aggregateSpatialBbox.clone()
     }
+    // Every layer fragment shares one INSERT object id, and the child spatial
+    // index is keyed by that id. Attaching the full child-box list to each
+    // fragment makes addEntity rebuild the same index once per layer. A
+    // whole-floor block (00-1~4F: 181515 children, 81 layers) spent ~74s
+    // there while "Rendering drawing ..." stayed up.
+    let registeredChildIndex = false
     objectsGroupByLayer.forEach((objects, layerName) => {
       // Nested layer-0 may already be resolved to an inner INSERT layer during
       // flatten. Remaining "0" buckets inherit this (outermost) INSERT layer.
@@ -3661,7 +3801,10 @@ export class AcTrView2d extends AcEdBaseView {
       const entityUserData = entity.userData as {
         spatialIndexChildBoxes?: AcEdSpatialQueryResultItem[]
       }
-      entityUserData.spatialIndexChildBoxes = groupChildBoxes
+      if (!registeredChildIndex && groupChildBoxes.length > 0) {
+        entityUserData.spatialIndexChildBoxes = groupChildBoxes
+        registeredChildIndex = true
+      }
 
       // Important:
       // DO NOT USE spread operator when adding objects because it may be one very large array
@@ -3698,6 +3841,9 @@ export class AcTrView2d extends AcEdBaseView {
       // the user pans/zooms (animate bails when !_isDirty && !_htmlDirty &&
       // !stillLoading).
       this._isDirty = true
+      // Missed images (and fonts already tracked) are collected during convert;
+      // notify the Resources / External References palette once the queue is idle.
+      eventBus.emit('missed-data-changed', {})
     }
     this.stampEntityProcessingIdle()
   }
