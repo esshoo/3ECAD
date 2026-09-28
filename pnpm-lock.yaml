@@ -5,8 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@mlightcad/data-model': ^1.15.0
-  '@mlightcad/libredwg-converter': ^3.15.0
+  '@mlightcad/data-model': https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+  '@mlightcad/libredwg-converter': https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz
   '@mlightcad/mtext-input-box': ^0.3.1
   '@mlightcad/mtext-parser': ^1.5.3
   '@mlightcad/mtext-renderer': ^0.13.1
@@ -125,6 +125,9 @@ importers:
       '@ai-sdk/vue':
         specifier: ^2.0.0
         version: 2.0.208(vue@3.5.31(typescript@5.9.3))(zod@3.25.76)
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
       ai:
         specifier: ^5.0.0
         version: 5.0.208(zod@3.25.76)
@@ -135,9 +138,6 @@ importers:
       '@mlightcad/cad-simple-viewer':
         specifier: workspace:*
         version: link:../cad-simple-viewer
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
       '@vitejs/plugin-vue':
         specifier: ^6.0.8
         version: 6.0.8(vite@6.4.3(@types/node@24.12.4)(sass@1.98.0)(yaml@2.8.3))(vue@3.5.31(typescript@5.9.3))
@@ -149,13 +149,14 @@ importers:
         version: 2.2.12(typescript@5.9.3)
 
   packages/cad-diff-viewer:
+    dependencies:
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
     devDependencies:
       '@mlightcad/cad-simple-viewer':
         specifier: workspace:*
         version: link:../cad-simple-viewer
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
 
   packages/cad-diff-viewer-example:
     dependencies:
@@ -166,11 +167,11 @@ importers:
         specifier: workspace:*
         version: link:../cad-simple-viewer
       '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
       '@mlightcad/libredwg-converter':
-        specifier: ^3.15.0
-        version: 3.15.0(@mlightcad/data-model@1.15.0)
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz(@mlightcad/data-model@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz)
       '@mlightcad/mtext-parser':
         specifier: ^1.5.3
         version: 1.5.3
@@ -185,13 +186,14 @@ importers:
         version: 0.172.0
 
   packages/cad-html-plugin:
+    dependencies:
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
     devDependencies:
       '@mlightcad/cad-simple-viewer':
         specifier: workspace:*
         version: link:../cad-simple-viewer
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
       '@mlightcad/three-renderer':
         specifier: workspace:*
         version: link:../three-renderer
@@ -215,13 +217,14 @@ importers:
         version: 0.172.0
 
   packages/cad-pdf-plugin:
+    dependencies:
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
     devDependencies:
       '@mlightcad/cad-simple-viewer':
         specifier: workspace:*
         version: link:../cad-simple-viewer
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
       '@mlightcad/mtext-parser':
         specifier: ^1.5.3
         version: 1.5.3
@@ -236,19 +239,21 @@ importers:
         version: 5.7.284
 
   packages/cad-simple-ui-plugin:
+    dependencies:
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
     devDependencies:
       '@mlightcad/cad-simple-viewer':
         specifier: workspace:*
         version: link:../cad-simple-viewer
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
 
   packages/cad-simple-viewer:
-    devDependencies:
+    dependencies:
       '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+    devDependencies:
       '@mlightcad/mtext-input-box':
         specifier: ^0.3.1
         version: 0.3.1(@mlightcad/mtext-parser@1.5.3)(@mlightcad/mtext-renderer@0.13.1(@mlightcad/mtext-parser@1.5.3)(three@0.172.0))(three@0.172.0)
@@ -301,11 +306,11 @@ importers:
         specifier: workspace:*
         version: link:../cad-svg-plugin
       '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
       '@mlightcad/libredwg-converter':
-        specifier: ^3.15.0
-        version: 3.15.0(@mlightcad/data-model@1.15.0)
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz(@mlightcad/data-model@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz)
       '@mlightcad/mtext-parser':
         specifier: ^1.5.3
         version: 1.5.3
@@ -356,11 +361,11 @@ importers:
         specifier: workspace:*
         version: link:../cad-svg-plugin
       '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
       '@mlightcad/libredwg-converter':
-        specifier: ^3.15.0
-        version: 3.15.0(@mlightcad/data-model@1.15.0)
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz(@mlightcad/data-model@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz)
       '@mlightcad/mtext-parser':
         specifier: ^1.5.3
         version: 1.5.3
@@ -388,13 +393,14 @@ importers:
         version: 6.0.8(vite@6.4.3(@types/node@24.12.4)(sass@1.98.0)(yaml@2.8.3))(vue@3.5.31(typescript@5.9.3))
 
   packages/cad-svg-plugin:
+    dependencies:
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
     devDependencies:
       '@mlightcad/cad-simple-viewer':
         specifier: workspace:*
         version: link:../cad-simple-viewer
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
       '@mlightcad/mtext-parser':
         specifier: ^1.5.3
         version: 1.5.3
@@ -403,6 +409,10 @@ importers:
         version: 0.13.1(@mlightcad/mtext-parser@1.5.3)(three@0.172.0)
 
   packages/cad-viewer:
+    dependencies:
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
     devDependencies:
       '@element-plus/icons-vue':
         specifier: ^2.3.1
@@ -422,9 +432,6 @@ importers:
       '@mlightcad/cad-svg-plugin':
         specifier: workspace:*
         version: link:../cad-svg-plugin
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
       '@mlightcad/pdf-renderer':
         specifier: workspace:*
         version: link:../pdf-renderer
@@ -501,11 +508,11 @@ importers:
         specifier: workspace:*
         version: link:../cad-viewer
       '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
       '@mlightcad/libredwg-converter':
-        specifier: ^3.15.0
-        version: 3.15.0(@mlightcad/data-model@1.15.0)
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz(@mlightcad/data-model@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz)
       '@mlightcad/mtext-parser':
         specifier: ^1.5.3
         version: 1.5.3
@@ -582,6 +589,9 @@ importers:
 
   packages/pdf-renderer:
     dependencies:
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
       '@pdf-lib/fontkit':
         specifier: ^1.1.1
         version: 1.1.1
@@ -592,9 +602,6 @@ importers:
         specifier: ^1.17.1
         version: 1.17.1
     devDependencies:
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
       '@mlightcad/mtext-parser':
         specifier: ^1.5.3
         version: 1.5.3
@@ -604,13 +611,13 @@ importers:
 
   packages/three-renderer:
     dependencies:
+      '@mlightcad/data-model':
+        specifier: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
+        version: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
       '@velipso/polybool':
         specifier: ^1.1.1
         version: 1.1.1
     devDependencies:
-      '@mlightcad/data-model':
-        specifier: ^1.15.0
-        version: 1.15.0
       '@mlightcad/mtext-parser':
         specifier: ^1.5.3
         version: 1.5.3
@@ -2114,8 +2121,9 @@ packages:
   '@mlightcad/common@1.15.0':
     resolution: {integrity: sha512-i19POXiKtDsNSHGgcZwhENqWaL+jWZS6SMeSGibt1399rBCLCMCF+Z25jybwZyaa5RfAbctkkEzlkCoKWqoz1A==}
 
-  '@mlightcad/data-model@1.15.0':
-    resolution: {integrity: sha512-v+LCH+eWY4DRHr/vJnYZ7u7Q5VkzrGOi/F8YA9XfJlecT+AUgB8genYgcKZbPvx9p3HDd8Fx8hz4R71LkJ5OjA==}
+  '@mlightcad/data-model@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz':
+    resolution: {integrity: sha512-1q4Ie1LYmweW4fUUULBAfTpbnxDXduf8d8hzPOiKhEf5P/cuu44tdzeXhqrxA7970Id47M9z3H76dHWFPEE94Q==, tarball: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz}
+    version: 1.15.0
 
   '@mlightcad/emf-converter@1.15.0':
     resolution: {integrity: sha512-VN6WXFPOj+gvb58pGG4ZEUydb7K2lfXScn9ubQnCea5sCSgpH1vkUNRK2NfNFGxQBqd8JmhTFrR1aFTi473Fpg==}
@@ -2131,10 +2139,11 @@ packages:
       '@mlightcad/common': 1.15.0
       '@mlightcad/geometry-engine': 3.15.0
 
-  '@mlightcad/libredwg-converter@3.15.0':
-    resolution: {integrity: sha512-QxMpjgFI9qKLn9zME10LEaC7u7piw/LFFaJnrpBf21fWZ+eck4D3V6OsrRR7oeHzDSx6Fuh9KKpY1TBnvRAULw==}
+  '@mlightcad/libredwg-converter@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz':
+    resolution: {integrity: sha512-stBlw6P9zA0pawx7fXMreq8xw8458/UqXqFl1IEsgDG7pRm4rJBaGot8lR0u0OS80M7TEfMVQmrqPBdNtePflQ==, tarball: https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz}
+    version: 3.15.0
     peerDependencies:
-      '@mlightcad/data-model': ^1.15.0
+      '@mlightcad/data-model': 1.15.0
 
   '@mlightcad/libredwg-web@0.7.14':
     resolution: {integrity: sha512-5zuTw+x5o/qj9czjkcf2o3PWuh8v+XEEFM9ZEMEhVRaJySZ6+C7Ua6y6hyGcwJ3WfmXhWAHEdVYsKtx4XAlvfA==}
@@ -7994,7 +8003,7 @@ snapshots:
     dependencies:
       loglevel: 1.9.2
 
-  '@mlightcad/data-model@1.15.0':
+  '@mlightcad/data-model@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz':
     dependencies:
       '@mlightcad/common': 1.15.0
       '@mlightcad/emf-converter': 1.15.0
@@ -8013,9 +8022,9 @@ snapshots:
       '@mlightcad/common': 1.15.0
       '@mlightcad/geometry-engine': 3.15.0(@mlightcad/common@1.15.0)
 
-  '@mlightcad/libredwg-converter@3.15.0(@mlightcad/data-model@1.15.0)':
+  '@mlightcad/libredwg-converter@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-libredwg-converter-3.15.0.tgz(@mlightcad/data-model@https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz)':
     dependencies:
-      '@mlightcad/data-model': 1.15.0
+      '@mlightcad/data-model': https://raw.githubusercontent.com/esshoo/realdwg-web/715a1e06341ca4ea9a117e59a426aa8f5d3fb6fe/3ecad-packages/mlightcad-data-model-1.15.0.tgz
       '@mlightcad/libredwg-web': 0.7.14
 
   '@mlightcad/libredwg-web@0.7.14': {}
