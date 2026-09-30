@@ -823,11 +823,15 @@ export const ACEX_HTML_SHELL_CSS = `
   .mlcad-measure-dot {
     position: absolute;
     z-index: 3;
-    width: 10px;
-    height: 10px;
+    /* em size tracks the paired badge font-size (set inline on the dot) */
+    font-size: 12px;
+    width: 0.55em;
+    height: 0.55em;
+    min-width: 5px;
+    min-height: 5px;
     border-radius: 50%;
     background: var(--mlcad-measure-accent);
-    border: 2px solid rgba(255, 255, 255, 0.9);
+    border: 0.12em solid rgba(255, 255, 255, 0.9);
     box-sizing: border-box;
     transform: translate(-50%, -50%);
     visibility: hidden;
@@ -837,10 +841,11 @@ export const ACEX_HTML_SHELL_CSS = `
   .mlcad-measure-dot.mlcad-measure-selected {
     visibility: visible;
     pointer-events: auto;
+    /* Hard ring at half original em thickness + soft glow */
     box-shadow:
-      0 0 0 2px rgba(255, 213, 79, 0.75),
-      0 0 10px rgba(255, 213, 79, 0.95),
-      0 0 18px rgba(255, 213, 79, 0.55);
+      0 0 0 0.06em rgba(255, 213, 79, 0.75),
+      0 0 0.35em rgba(255, 213, 79, 0.9),
+      0 0 0.7em rgba(255, 213, 79, 0.5);
   }
   #mlcad-measure-overlays.mlcad-grip-dragging .mlcad-measure-dot {
     visibility: hidden !important;
@@ -849,10 +854,11 @@ export const ACEX_HTML_SHELL_CSS = `
   .mlcad-measure-badge {
     position: absolute;
     z-index: 2;
-    padding: 3px 10px;
-    border-radius: 14px;
+    /* em padding/radius/border so the capsule scales with font-size */
+    padding: 0.25em 0.833em;
+    border-radius: 1.167em;
     background: var(--mlcad-ui-bg-elevated);
-    border: 1px solid var(--mlcad-measure-accent-border);
+    border: 0.083em solid var(--mlcad-measure-accent-border);
     color: var(--mlcad-measure-accent);
     font-size: 12px;
     font-weight: 600;
@@ -865,18 +871,21 @@ export const ACEX_HTML_SHELL_CSS = `
     transform: translate(-50%, calc(-50% - 16px));
   }
   .mlcad-measure-badge.mlcad-measure-selected {
-    outline: 2px solid rgba(255, 213, 79, 0.85);
-    outline-offset: 1px;
+    /* Hard ring at half original em thickness + soft glow */
+    outline: 0.075em solid rgba(255, 213, 79, 0.85);
+    outline-offset: 0.04em;
     box-shadow:
-      0 0 0 2px rgba(255, 213, 79, 0.4),
-      0 0 12px rgba(255, 213, 79, 0.75),
+      0 0 0 0.075em rgba(255, 213, 79, 0.4),
+      0 0 0.45em rgba(255, 213, 79, 0.85),
+      0 0 0.9em rgba(255, 213, 79, 0.55),
       0 2px 8px rgba(0, 0, 0, 0.35);
   }
   .mlcad-measure-canvas.mlcad-measure-selected {
+    /* font-size is seeded from the paired badge so em tracks text size */
     filter:
-      drop-shadow(0 0 1.5px #ffd54f)
-      drop-shadow(0 0 4px rgba(255, 213, 79, 0.95))
-      drop-shadow(0 0 8px rgba(255, 213, 79, 0.55));
+      drop-shadow(0 0 0.12em #ffd54f)
+      drop-shadow(0 0 0.3em rgba(255, 213, 79, 0.95))
+      drop-shadow(0 0 0.6em rgba(255, 213, 79, 0.55));
   }
 
   #mlcad-markup-overlays {
@@ -927,11 +936,14 @@ export const ACEX_HTML_SHELL_CSS = `
   }
   .mlcad-markup-preview-dot {
     position: absolute;
-    width: 10px;
-    height: 10px;
+    font-size: 12px;
+    width: 0.55em;
+    height: 0.55em;
+    min-width: 5px;
+    min-height: 5px;
     border-radius: 50%;
     background: var(--mlcad-markup-accent);
-    border: 2px solid rgba(255, 255, 255, 0.9);
+    border: 0.12em solid rgba(255, 255, 255, 0.9);
     box-sizing: border-box;
     transform: translate(-50%, -50%);
     pointer-events: none;
@@ -939,11 +951,14 @@ export const ACEX_HTML_SHELL_CSS = `
   .mlcad-markup-dot {
     position: absolute;
     z-index: 3;
-    width: 10px;
-    height: 10px;
+    font-size: 12px;
+    width: 0.55em;
+    height: 0.55em;
+    min-width: 5px;
+    min-height: 5px;
     border-radius: 50%;
     background: var(--mlcad-markup-accent);
-    border: 2px solid rgba(255, 255, 255, 0.9);
+    border: 0.12em solid rgba(255, 255, 255, 0.9);
     box-sizing: border-box;
     transform: translate(-50%, -50%);
     visibility: hidden;
@@ -954,9 +969,9 @@ export const ACEX_HTML_SHELL_CSS = `
     visibility: visible;
     pointer-events: auto;
     box-shadow:
-      0 0 0 2px rgba(255, 213, 79, 0.75),
-      0 0 10px rgba(255, 213, 79, 0.95),
-      0 0 18px rgba(255, 213, 79, 0.55);
+      0 0 0 0.06em rgba(255, 213, 79, 0.75),
+      0 0 0.35em rgba(255, 213, 79, 0.9),
+      0 0 0.7em rgba(255, 213, 79, 0.5);
   }
   #mlcad-markup-overlays.mlcad-grip-dragging .mlcad-markup-dot {
     visibility: hidden !important;
@@ -964,18 +979,19 @@ export const ACEX_HTML_SHELL_CSS = `
   }
   .mlcad-markup-badge.mlcad-markup-selected,
   .mlcad-markup-stamp.mlcad-markup-selected {
-    outline: 2px solid rgba(255, 213, 79, 0.85);
-    outline-offset: 1px;
+    outline: 0.075em solid rgba(255, 213, 79, 0.85);
+    outline-offset: 0.04em;
     box-shadow:
-      0 0 0 2px rgba(255, 213, 79, 0.4),
-      0 0 12px rgba(255, 213, 79, 0.75),
+      0 0 0 0.075em rgba(255, 213, 79, 0.4),
+      0 0 0.45em rgba(255, 213, 79, 0.85),
+      0 0 0.9em rgba(255, 213, 79, 0.55),
       0 2px 8px rgba(0, 0, 0, 0.35);
   }
   .mlcad-markup-canvas.mlcad-markup-selected {
     filter:
-      drop-shadow(0 0 1.5px #ffd54f)
-      drop-shadow(0 0 4px rgba(255, 213, 79, 0.95))
-      drop-shadow(0 0 8px rgba(255, 213, 79, 0.55));
+      drop-shadow(0 0 0.12em #ffd54f)
+      drop-shadow(0 0 0.3em rgba(255, 213, 79, 0.95))
+      drop-shadow(0 0 0.6em rgba(255, 213, 79, 0.55));
   }
 
   #mlcad-loading {
@@ -1535,6 +1551,7 @@ function buildAcExMeasureDrawer(): string {
           <div class="mlcad-measure-filter" role="group" data-i18n-key="measurePanel.filterGroup" data-i18n-attr="aria-label" aria-label="Filter by type">
             <button type="button" class="mlcad-measure-filter-btn" data-measure-filter="distance" aria-pressed="false" data-i18n-key="measurePanel.filterDistance" data-i18n-text data-i18n-attr="title aria-label" title="Distance">Distance</button>
             <button type="button" class="mlcad-measure-filter-btn" data-measure-filter="arc" aria-pressed="false" data-i18n-key="measurePanel.filterArc" data-i18n-text data-i18n-attr="title aria-label" title="Arc">Arc</button>
+            <button type="button" class="mlcad-measure-filter-btn" data-measure-filter="radius" aria-pressed="false" data-i18n-key="measurePanel.filterRadius" data-i18n-text data-i18n-attr="title aria-label" title="Radius">Radius</button>
             <button type="button" class="mlcad-measure-filter-btn" data-measure-filter="angle" aria-pressed="false" data-i18n-key="measurePanel.filterAngle" data-i18n-text data-i18n-attr="title aria-label" title="Angle">Angle</button>
             <button type="button" class="mlcad-measure-filter-btn" data-measure-filter="area" aria-pressed="false" data-i18n-key="measurePanel.filterArea" data-i18n-text data-i18n-attr="title aria-label" title="Area">Area</button>
           </div>
